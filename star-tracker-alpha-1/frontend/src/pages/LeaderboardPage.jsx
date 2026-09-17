@@ -49,7 +49,7 @@ export default function LeaderboardPage() {
       <Navbar />
       <div className="flex">
         <Sidebar role={user?.role || 'student'} />
-        <main className="flex-1 p-8 max-w-7xl mx-auto">
+        <main className="portal-main flex-1 p-8 max-w-7xl mx-auto">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
             <div>

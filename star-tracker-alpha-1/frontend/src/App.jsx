@@ -52,7 +52,7 @@ function ProtectedRoute({ children, allowedRoles }) {
     // Redirect to respective dashboard if role doesn't match
     if (user.role === 'student') return <Navigate to="/student/dashboard" replace />;
     if (user.role === 'advisor') return <Navigate to="/advisor/dashboard" replace />;
-    if (user.role === 'hod') return <Navigate to="/hod/dashboard" replace />;
+    if (user.role === 'hod' || user.role === 'dean' || user.role === 'principal') return <Navigate to="/hod/dashboard" replace />;
     if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
     return <Navigate to="/" replace />;
   }
@@ -128,29 +128,29 @@ export default function App() {
             </ProtectedRoute>
           } />
 
-          {/* HOD Routes */}
+          {/* HOD / Dean / Principal Routes */}
           <Route path="/hod" element={
-            <ProtectedRoute allowedRoles={['hod']}>
+            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal']}>
               <HodDashboard />
             </ProtectedRoute>
           } />
           <Route path="/hod/dashboard" element={
-            <ProtectedRoute allowedRoles={['hod']}>
+            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal']}>
               <HodDashboard />
             </ProtectedRoute>
           } />
           <Route path="/hod/advisors" element={
-            <ProtectedRoute allowedRoles={['hod']}>
+            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal']}>
               <HodAdvisors />
             </ProtectedRoute>
           } />
           <Route path="/hod/analytics" element={
-            <ProtectedRoute allowedRoles={['hod']}>
+            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal']}>
               <HodAnalytics />
             </ProtectedRoute>
           } />
           <Route path="/hod/reports" element={
-            <ProtectedRoute allowedRoles={['hod']}>
+            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal']}>
               <HodReports />
             </ProtectedRoute>
           } />

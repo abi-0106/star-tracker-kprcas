@@ -40,7 +40,7 @@ export default function AdvisorQueue() {
       <div style={{ display: 'flex' }}>
         <Sidebar userRole="advisor" />
 
-        <main style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
+        <main className="portal-main" style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
           <div className="glass-card" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, rgba(32,142,71,0.1), rgba(43,77,145,0.1))', border: '1px solid rgba(32,142,71,0.25)' }}>
             <span className="badge badge-pending" style={{ marginBottom: '0.5rem' }}>VERIFICATION QUEUE</span>
             <h1 style={{ fontSize: '1.8rem', marginBottom: '0.25rem', color: 'var(--brand-blue)' }}>Pending Review Queue</h1>
@@ -57,7 +57,7 @@ export default function AdvisorQueue() {
                 <p>All student achievement submissions have been reviewed.</p>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
+              <div className="table-container" style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>

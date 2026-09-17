@@ -52,7 +52,7 @@ export default function StudentCertificates() {
       <div style={{ display: 'flex' }}>
         <Sidebar userRole="student" />
 
-        <main style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
+        <main className="portal-main" style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
           {/* Header */}
           <div className="glass-card" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, rgba(32,142,71,0.1), rgba(43,77,145,0.1))', border: '1px solid rgba(32,142,71,0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
@@ -63,7 +63,7 @@ export default function StudentCertificates() {
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <div className="header-actions" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
               <ExportButton
                 buttonText="Export Certificate Log"
                 getExportOptions={() => ({

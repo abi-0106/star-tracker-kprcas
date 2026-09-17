@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, Sun, Moon, Bell, Search, User } from 'lucide-react';
+import { LogOut, Sun, Moon, Bell, Search, User, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
@@ -40,6 +40,8 @@ export default function Navbar({ onThemeToggle, theme }) {
 
   const getRoleBadgeColor = (role) => {
     switch (role) {
+      case 'principal': return '#7C3AED';
+      case 'dean': return '#4F46E5';
       case 'admin': return '#DC2626';
       case 'hod': return '#D97706';
       case 'advisor': return '#2B4D91';
@@ -49,7 +51,7 @@ export default function Navbar({ onThemeToggle, theme }) {
   };
 
   return (
-    <header style={{
+    <header className="portal-header" style={{
       background: 'var(--bg-secondary)',
       borderBottom: '1px solid var(--border-color)',
       boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
@@ -62,26 +64,45 @@ export default function Navbar({ onThemeToggle, theme }) {
       top: 0,
       zIndex: 50,
     }}>
-      {/* Brand */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+      {/* Brand & Mobile Menu Toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        {user && (
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('toggle-sidebar'))}
+            className="mobile-nav-toggle"
+            title="Toggle Menu"
+            style={{
+              background: 'var(--bg-primary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 8,
+              width: 36,
+              height: 36,
+              cursor: 'pointer',
+              color: 'var(--text-primary)',
+            }}
+          >
+            <Menu size={20} />
+          </button>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }} onClick={() => navigate('/')}>
-          <div style={{ width: 42, height: 42, borderRadius: 10, overflow: 'hidden', flexShrink: 0, border: '1px solid rgba(32,142,71,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
-            <img src="/kprcas-logo.png" alt="KPRCAS Logo" style={{ width: 40, height: 40, objectFit: 'contain' }} />
+          <div style={{ width: 40, height: 40, borderRadius: 8, overflow: 'hidden', flexShrink: 0, border: '1px solid rgba(32,142,71,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+            <img src="/kprcas-logo.png" alt="KPRCAS Logo" style={{ width: 38, height: 38, objectFit: 'contain' }} />
           </div>
           <div>
-            <h2 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, color: 'var(--brand-blue)', letterSpacing: '-0.01em' }}>
-              STAR TRACKER{' '}
+            <h2 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, color: 'var(--brand-blue)', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              STAR TRACKER
               <span style={{
                 color: '#fff',
-                fontSize: '0.65rem',
-                padding: '2px 7px',
+                fontSize: '0.62rem',
+                padding: '1px 6px',
                 background: 'var(--brand-green)',
                 borderRadius: 4,
                 letterSpacing: '0.04em',
                 fontWeight: 700,
               }}>ERP</span>
             </h2>
-            <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0, fontWeight: 500 }}>
+            <p className="desktop-sub-header" style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0, fontWeight: 500 }}>
               KPR College of Arts Science and Research
             </p>
           </div>
@@ -89,7 +110,7 @@ export default function Navbar({ onThemeToggle, theme }) {
       </div>
 
       {/* Right Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         {/* Theme Toggle */}
         <button
           onClick={onThemeToggle}

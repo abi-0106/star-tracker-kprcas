@@ -43,7 +43,7 @@ export default function AdvisorAnalytics() {
       <div style={{ display: 'flex' }}>
         <Sidebar userRole="advisor" />
 
-        <main style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
+        <main className="portal-main" style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
           <div className="glass-card" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, rgba(32,142,71,0.1), rgba(43,77,145,0.1))', border: '1px solid rgba(32,142,71,0.25)' }}>
             <span className="badge badge-mandatory" style={{ marginBottom: '0.5rem' }}>CLASS PERFORMANCE ANALYTICS</span>
             <h1 style={{ fontSize: '1.8rem', marginBottom: '0.25rem', color: 'var(--brand-blue)' }}>

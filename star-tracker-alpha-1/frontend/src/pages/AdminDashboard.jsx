@@ -33,7 +33,7 @@ export default function AdminDashboard() {
       <Navbar />
       <div className="flex">
         <Sidebar role="admin" />
-        <main className="flex-1 p-8 max-w-7xl mx-auto">
+        <main className="portal-main flex-1 p-8 max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-[var(--text-main)]">System Administration</h1>

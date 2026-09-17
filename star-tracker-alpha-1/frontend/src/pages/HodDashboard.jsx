@@ -63,7 +63,7 @@ export default function HodDashboard() {
       <div style={{ display: 'flex' }}>
         <Sidebar userRole="hod" />
 
-        <main style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
+        <main className="portal-main" style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
           {/* Header Banner */}
           <div className="glass-card" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, rgba(32,142,71,0.1), rgba(43,77,145,0.1))', border: '1px solid rgba(32,142,71,0.25)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>

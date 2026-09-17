@@ -76,7 +76,7 @@ export default function StudentSubmit() {
       <div style={{ display: 'flex' }}>
         <Sidebar userRole="student" />
 
-        <main style={{ flex: 1, padding: '2rem', maxWidth: 900, margin: '0 auto' }}>
+        <main className="portal-main" style={{ flex: 1, padding: '2rem', maxWidth: 900, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
             <button onClick={() => navigate(-1)} className="btn btn-secondary" style={{ padding: '0.4rem 0.75rem' }}>
               <ArrowLeft size={16} /> Back

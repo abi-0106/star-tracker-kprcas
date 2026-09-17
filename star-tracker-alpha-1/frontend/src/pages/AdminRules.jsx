@@ -64,7 +64,7 @@ export default function AdminRules() {
       <Navbar />
       <div className="flex">
         <Sidebar role="admin" />
-        <main className="flex-1 p-8 max-w-7xl mx-auto">
+        <main className="portal-main flex-1 p-8 max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-[var(--text-main)]">Point & Mark Rules Configuration</h1>
             <p className="text-sm text-[var(--text-muted)] mt-1">

@@ -50,7 +50,7 @@ export default function AdminUsers() {
       <Navbar />
       <div className="flex">
         <Sidebar role="admin" />
-        <main className="flex-1 p-8 max-w-7xl mx-auto">
+        <main className="portal-main flex-1 p-8 max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
             <div>
               <h1 className="text-2xl font-bold text-[var(--text-main)]">User Management</h1>

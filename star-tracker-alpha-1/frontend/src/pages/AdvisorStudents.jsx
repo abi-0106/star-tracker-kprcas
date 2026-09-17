@@ -48,7 +48,7 @@ export default function AdvisorStudents() {
       <div style={{ display: 'flex' }}>
         <Sidebar userRole="advisor" />
 
-        <main style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
+        <main className="portal-main" style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
           <div className="glass-card" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, rgba(32,142,71,0.1), rgba(43,77,145,0.1))', border: '1px solid rgba(32,142,71,0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
               <span className="badge badge-mandatory" style={{ marginBottom: '0.5rem' }}>CLASS ROSTER</span>
@@ -73,10 +73,9 @@ export default function AdvisorStudents() {
                   { header: 'Email', key: 'email' },
                   { header: 'Phone', key: 'phone' },
                   { header: 'Total SP', key: 'total_sp', formatter: val => `${val} SP` },
-                  { header: 'Bonus SP', key: 'bonus_sp', formatter: val => `${val} SP` },
-                  { header: 'Internal Marks (100)', key: 'internal_marks_100' },
-                  { header: 'Internal Marks (50)', key: 'internal_marks_50' },
+                  { header: 'Internal Mark (100)', key: 'internal_marks_100', formatter: val => `${val} / 100` },
                   { header: 'Mandatory Satisfied', key: 'mandatory_satisfied', formatter: val => val ? 'YES' : 'NO' },
+                  { header: 'Approved Certs', key: 'approved_count' },
                 ],
                 data: filteredStudents,
               })}
@@ -84,24 +83,25 @@ export default function AdvisorStudents() {
           </div>
 
           <div className="glass-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-              <div style={{ position: 'relative', width: 300 }}>
-                <Search size={15} style={{ position: 'absolute', left: 10, top: 11, color: 'var(--text-muted)' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ position: 'relative', width: '100%', maxWidth: 360 }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
-                  placeholder="Search by student name or Reg No..."
+                  placeholder="Search students by name or reg no..."
+                  className="form-input"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="form-input"
-                  style={{ width: '100%', paddingLeft: 32, fontSize: '0.82rem' }}
+                  style={{ paddingLeft: '2.5rem' }}
                 />
               </div>
-              <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                 Showing <strong>{filteredStudents.length}</strong> students
               </span>
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
+            <div className="table-container" style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>

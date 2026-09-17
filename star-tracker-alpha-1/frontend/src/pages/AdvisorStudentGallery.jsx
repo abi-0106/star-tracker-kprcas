@@ -22,7 +22,7 @@ export default function AdvisorStudentGallery() {
       <Navbar onThemeToggle={toggleTheme} theme={theme} />
       <div style={{ display: 'flex' }}>
         <Sidebar userRole="advisor" />
-        <main style={{ flex: 1, padding: '2rem' }}>
+        <main className="portal-main" style={{ flex: 1, padding: '2rem' }}>
           <StudentGalleryModal
             studentId={studentId}
             onClose={() => navigate('/advisor/students')}
