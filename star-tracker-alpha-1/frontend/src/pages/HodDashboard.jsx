@@ -3,7 +3,7 @@ import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import ExportButton from '../components/ExportButton';
 import StudentGalleryModal from '../components/StudentGalleryModal';
-import { Building2, Users, Award, Eye, Layers, Trophy, Mail, Phone, BookOpen, Clock, Folder } from 'lucide-react';
+import { Building2, Users, Award, Eye, Layers, Trophy, Mail, Phone, BookOpen, Clock, Folder, TrendingUp } from 'lucide-react';
 import { api } from '../services/api';
 
 export default function HodDashboard() {
@@ -49,12 +49,21 @@ export default function HodDashboard() {
   if (loading || !data) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Loading HOD Department Portal...</p>
+        <div style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+          <p style={{ color: 'var(--text-secondary)' }}>Loading Dashboard...</p>
+        </div>
       </div>
     );
   }
 
-  const { department, stats, classes, advisors = [], verticalBreakdown, topStudents } = data;
+  const { 
+    department = {}, 
+    stats = { totalStudents: 0, totalAdvisors: 0, deptAvgSP: 0, deptTotalSP: 0 }, 
+    classes = [], 
+    advisors = [], 
+    verticalBreakdown = [], 
+    topStudents = [] 
+  } = data;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
@@ -99,41 +108,73 @@ export default function HodDashboard() {
           </div>
 
           {/* Department Overview Metric Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1.15rem', marginBottom: '2rem' }}>
+            {/* 1. Total Students */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Total Students</span>
-                <Users size={20} color="var(--brand-blue)" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Total Students</span>
+                <Users size={19} color="var(--brand-blue)" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--brand-blue)' }}>{stats.totalStudents}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Across {classes.length} class sections</div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--brand-blue)', lineHeight: 1.1 }}>{stats.totalStudents}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>Across {classes.length} class sections</div>
             </div>
 
+            {/* 2. Class Advisors */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Class Advisors</span>
-                <BookOpen size={20} color="var(--brand-green)" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Class Advisors</span>
+                <BookOpen size={19} color="var(--brand-green)" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--brand-green)' }}>{stats.totalAdvisors}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Faculty assigned</div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--brand-green)', lineHeight: 1.1 }}>{stats.totalAdvisors}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>Faculty sections assigned</div>
             </div>
 
+            {/* 3. Department Avg SP */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Department Avg SP</span>
-                <Award size={20} color="var(--brand-green)" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Department Avg SP</span>
+                <Award size={19} color="var(--brand-green)" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--brand-green)' }}>{stats.deptAvgSP} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>SP</span></div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Avg Internal Mark: {(stats.deptAvgSP / 2).toFixed(1)} / 100</div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--brand-green)', lineHeight: 1.1 }}>
+                {stats.deptAvgSP} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>SP</span>
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>Avg Mark: {(stats.deptAvgSP / 2).toFixed(1)} / 100</div>
             </div>
 
+            {/* 4. Cumulative Star Points */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Cumulative Star Points</span>
-                <Trophy size={20} color="#D97706" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Cumulative Star Points</span>
+                <Trophy size={19} color="#D97706" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: '#D97706' }}>{stats.deptTotalSP}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Points earned by department</div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#D97706', lineHeight: 1.1 }}>
+                {stats.deptTotalSP} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>SP</span>
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>Total department achievement</div>
+            </div>
+
+            {/* 5. Department Internal Marks Total */}
+            <div className="glass-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Total Internal Marks</span>
+                <TrendingUp size={19} color="#1E3870" />
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1E3870', lineHeight: 1.1 }}>
+                {(stats.deptTotalSP / 2).toFixed(1)} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Marks</span>
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>Conversion: 2 SP = 1 Mark</div>
+            </div>
+
+            {/* 6. Pending Review Queue */}
+            <div className="glass-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Review Queue</span>
+                <Clock size={19} color="#D97706" />
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#D97706', lineHeight: 1.1 }}>
+                {classes.reduce((acc, c) => acc + Number(c.pending_count || 0), 0)}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>Awaiting advisor action</div>
             </div>
           </div>
 

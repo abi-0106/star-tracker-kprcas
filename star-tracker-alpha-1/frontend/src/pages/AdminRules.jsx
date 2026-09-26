@@ -2,17 +2,24 @@ import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { Settings, Save, CheckCircle2, AlertCircle, Layers, Activity } from 'lucide-react';
 
 export default function AdminRules() {
+  const { user } = useAuth();
   const [ratio, setRatio] = useState(2);
   const [verticals, setVerticals] = useState([]);
-  const [activities, setActivities] = useState([]);
-  const [levels, setLevels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [theme, setTheme] = useState('light');
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+  };
 
   useEffect(() => {
     fetchRules();
@@ -21,20 +28,18 @@ export default function AdminRules() {
   const fetchRules = async () => {
     try {
       setLoading(true);
-      const [settingsRes, vertsRes, actsRes, lvlsRes] = await Promise.all([
-        api.get('/api/admin/settings'),
-        api.get('/api/verticals'),
-        api.get('/api/activities'),
-        api.get('/api/activity-levels')
+      const [settingsRes, vertsRes] = await Promise.all([
+        api.getAdminSettings().catch(() => ({})),
+        api.getVerticals().catch(() => ({ verticals: [] }))
       ]);
-      if (settingsRes.sp_to_marks_ratio) {
+
+      if (settingsRes && settingsRes.sp_to_marks_ratio) {
         setRatio(parseFloat(settingsRes.sp_to_marks_ratio));
       }
-      setVerticals(vertsRes || []);
-      setActivities(actsRes || []);
-      setLevels(lvlsRes || []);
+      const vertsList = Array.isArray(vertsRes) ? vertsRes : (vertsRes?.verticals || []);
+      setVerticals(vertsList);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to fetch rules:', err);
     } finally {
       setLoading(false);
     }
@@ -46,7 +51,7 @@ export default function AdminRules() {
       setSaving(true);
       setSuccessMsg('');
       setErrorMsg('');
-      await api.post('/api/admin/settings', {
+      await api.updateAdminSettings({
         setting_key: 'sp_to_marks_ratio',
         setting_value: String(ratio),
         description: 'Star Points to Internal Marks conversion ratio'
@@ -59,56 +64,60 @@ export default function AdminRules() {
     }
   };
 
+  const userRole = user?.role || 'admin';
+
   return (
-    <div className="min-h-screen bg-[var(--bg-main)]">
-      <Navbar />
-      <div className="flex">
-        <Sidebar role="admin" />
-        <main className="portal-main flex-1 p-8 max-w-7xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-[var(--text-main)]">Point & Mark Rules Configuration</h1>
-            <p className="text-sm text-[var(--text-muted)] mt-1">
-              Configure institution scoring metrics, conversion formulas, and vertical guidelines
+    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
+      <Navbar onThemeToggle={toggleTheme} theme={theme} />
+      <div style={{ display: 'flex' }}>
+        <Sidebar userRole={userRole} role={userRole} />
+        <main className="portal-main" style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
+          {/* Header */}
+          <div className="glass-card" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, rgba(32,142,71,0.1), rgba(43,77,145,0.1))', border: '1px solid rgba(32,142,71,0.25)' }}>
+            <span className="badge badge-mandatory" style={{ marginBottom: '0.5rem' }}>RULES & SCORING ENGINE</span>
+            <h1 style={{ fontSize: '1.8rem', marginBottom: '0.25rem', color: 'var(--brand-blue)' }}>Point & Mark Rules Configuration</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+              Configure institution-wide scoring metrics, conversion formulas, and vertical guidelines.
             </p>
           </div>
 
           {loading ? (
-            <div className="flex justify-center items-center py-24">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[var(--primary)]"></div>
+            <div style={{ textAlign: 'center', padding: '4rem 1rem', color: 'var(--text-secondary)' }}>
+              <p>Loading Rules & Configurations...</p>
             </div>
           ) : (
-            <div className="space-y-8">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               {/* Ratio Configuration Card */}
-              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-6 shadow-sm">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-[var(--primary-subtle)] text-[var(--primary)] rounded-lg">
-                    <Settings className="w-5 h-5" />
+              <div className="glass-card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(32,142,71,0.12)', color: 'var(--brand-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Settings size={20} />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-[var(--text-main)]">Point Conversion Ratio</h2>
-                    <p className="text-xs text-[var(--text-muted)]">Configure how Star Points convert into academic Internal Marks</p>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--brand-blue)' }}>Point Conversion Formula</h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.15rem 0 0 0' }}>Configure how Star Points convert into academic Internal Marks</p>
                   </div>
                 </div>
 
                 {successMsg && (
-                  <div className="mb-4 p-3 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-lg text-sm flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                  <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(32,142,71,0.1)', border: '1px solid rgba(32,142,71,0.3)', color: 'var(--brand-green)', borderRadius: 8, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+                    <CheckCircle2 size={16} />
                     <span>{successMsg}</span>
                   </div>
                 )}
                 {errorMsg && (
-                  <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-sm flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.3)', color: '#DC2626', borderRadius: 8, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+                    <AlertCircle size={16} />
                     <span>{errorMsg}</span>
                   </div>
                 )}
 
-                <form onSubmit={handleSaveRatio} className="flex flex-col sm:flex-row items-end gap-4 max-w-xl">
-                  <div className="flex-1 w-full">
-                    <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase mb-2">
+                <form onSubmit={handleSaveRatio} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '1rem', maxWidth: 600 }}>
+                  <div style={{ flex: 1, minWidth: 240 }}>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
                       Star Points per 1 Internal Mark
                     </label>
-                    <div className="flex items-center gap-3">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       <input 
                         type="number" 
                         min="1" 
@@ -116,46 +125,50 @@ export default function AdminRules() {
                         step="0.5"
                         value={ratio}
                         onChange={(e) => setRatio(parseFloat(e.target.value))}
-                        className="w-32 px-4 py-2.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-main)] text-[var(--text-main)] font-bold text-center text-lg focus:outline-none focus:border-[var(--primary)]"
+                        className="form-input"
+                        style={{ width: 100, textAlign: 'center', fontWeight: 800, fontSize: '1.1rem' }}
                         required
                       />
-                      <span className="text-sm text-[var(--text-muted)]">
-                        Star Points = <strong className="text-[var(--text-main)]">1 Internal Mark</strong>
+                      <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                        Star Points = <strong style={{ color: 'var(--brand-green)' }}>1 Internal Mark</strong>
                       </span>
                     </div>
                   </div>
                   <button
                     type="submit"
                     disabled={saving}
-                    className="btn btn-primary flex items-center gap-2 px-6 py-2.5"
+                    className="btn btn-primary"
+                    style={{ padding: '0.65rem 1.25rem' }}
                   >
-                    <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : 'Update Ratio'}
+                    <Save size={16} />
+                    <span>{saving ? 'Saving...' : 'Update Formula'}</span>
                   </button>
                 </form>
               </div>
 
               {/* Verticals Directory */}
-              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
+              <div className="glass-card">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
                   <div>
-                    <h2 className="text-lg font-bold text-[var(--text-main)]">10 Verticals Framework</h2>
-                    <p className="text-xs text-[var(--text-muted)]">Curriculum verticals and activity distribution</p>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--brand-blue)', margin: 0 }}>10 Verticals Framework</h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.15rem 0 0 0' }}>Curriculum verticals and activity point limits</p>
                   </div>
-                  <Layers className="w-5 h-5 text-[var(--primary)]" />
+                  <Layers size={20} color="var(--brand-green)" />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
                   {verticals.map((v) => (
-                    <div key={v.id} className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-main)]">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[var(--primary-subtle)] text-[var(--primary)]">
+                    <div key={v.id} style={{ padding: '1rem', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: 'rgba(32,142,71,0.15)', color: 'var(--brand-green)' }}>
                           {v.code}
                         </span>
-                        <span className="text-xs text-[var(--text-muted)]">Weight: {v.weightage || 10}%</span>
+                        <span className={`badge badge-${v.type === 'Mandatory' ? 'mandatory' : 'optional'}`}>
+                          {v.type} (Max {v.max_sp} SP)
+                        </span>
                       </div>
-                      <h4 className="font-bold text-sm text-[var(--text-main)] mt-2">{v.name}</h4>
-                      <p className="text-xs text-[var(--text-muted)] mt-1">{v.description}</p>
+                      <h4 style={{ fontSize: '0.92rem', fontWeight: 700, margin: '0.4rem 0 0.2rem 0', color: 'var(--text-primary)' }}>{v.name}</h4>
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>{v.description || 'Curriculum framework vertical'}</p>
                     </div>
                   ))}
                 </div>

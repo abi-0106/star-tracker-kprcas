@@ -48,14 +48,31 @@ export default function AdvisorStudents() {
       <div style={{ display: 'flex' }}>
         <Sidebar userRole="advisor" />
 
-        <main className="portal-main" style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
-          <div className="glass-card" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, rgba(32,142,71,0.1), rgba(43,77,145,0.1))', border: '1px solid rgba(32,142,71,0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <main className="portal-main" style={{ flex: 1, padding: '1.75rem 2rem', maxWidth: 1400, width: '100%' }}>
+          <div style={{ 
+            position: 'sticky', 
+            top: 72, 
+            zIndex: 35, 
+            marginBottom: '1.5rem',
+            background: 'var(--bg-secondary)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+            padding: '1.25rem 1.5rem',
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            flexWrap: 'wrap', 
+            gap: '1rem' 
+          }}>
             <div>
-              <span className="badge badge-mandatory" style={{ marginBottom: '0.5rem' }}>CLASS ROSTER</span>
-              <h1 style={{ fontSize: '1.8rem', marginBottom: '0.25rem', color: 'var(--brand-blue)' }}>
+              <span className="badge badge-mandatory" style={{ marginBottom: '0.35rem' }}>CLASS ROSTER</span>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, color: 'var(--brand-blue)' }}>
                 {classInfo ? `${classInfo.name} — Section ${classInfo.section} Students` : 'Class Student Roster'}
               </h1>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: '0.2rem 0 0' }}>
                 View complete student performance, total Star Points, converted internal marks, and achievement galleries.
               </p>
             </div>

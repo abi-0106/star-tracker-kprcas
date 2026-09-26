@@ -4,15 +4,18 @@ import * as XLSX from 'xlsx';
 
 export async function exportToPDF(options) {
   const {
-    title,
+    title = 'STAR Tracker Report',
     department = 'School of IT Integrated Commerce',
     className,
     generatedBy = 'STAR Tracker Portal',
-    columns,
-    data,
-    fileName = 'star-tracker-report',
+    columns = [],
+    data = [],
+    fileName,
+    filename,
     orientation = 'landscape',
   } = options;
+
+  const actualFileName = fileName || filename || 'star-tracker-report';
 
   const doc = new jsPDF({
     orientation,
@@ -53,9 +56,10 @@ export async function exportToPDF(options) {
   const headers = columns.map(col => col.header);
   const rows = data.map((row, idx) => {
     return columns.map(col => {
-      if (col.formatter) return col.formatter(row[col.key], row);
-      if (col.key === 'index') return String(idx + 1);
-      return row[col.key] !== undefined && row[col.key] !== null ? String(row[col.key]) : '—';
+      const key = col.key || col.dataKey;
+      if (col.formatter) return col.formatter(key ? row[key] : '', row);
+      if (key === 'index' || key === 'S.No') return String(idx + 1);
+      return (key && row[key] !== undefined && row[key] !== null) ? String(row[key]) : '—';
     });
   });
 
@@ -83,21 +87,23 @@ export async function exportToPDF(options) {
     margin: { left: 14, right: 14 },
   });
 
-  doc.save(`${fileName}.pdf`);
+  doc.save(`${actualFileName}.pdf`);
 }
 
 export function exportToExcel(options) {
-  const { title, columns, data, fileName = 'star-tracker-report' } = options;
+  const { title = 'Report', columns = [], data = [], fileName, filename } = options;
+  const actualFileName = fileName || filename || 'star-tracker-report';
 
   const excelRows = data.map((row, idx) => {
     const obj = {};
     columns.forEach(col => {
+      const key = col.key || col.dataKey;
       if (col.formatter) {
-        obj[col.header] = col.formatter(row[col.key], row);
-      } else if (col.key === 'index') {
+        obj[col.header] = col.formatter(key ? row[key] : '', row);
+      } else if (key === 'index' || key === 'S.No') {
         obj[col.header] = idx + 1;
       } else {
-        obj[col.header] = row[col.key] ?? '—';
+        obj[col.header] = (key && row[key] !== undefined && row[key] !== null) ? row[key] : '—';
       }
     });
     return obj;
@@ -106,5 +112,5 @@ export function exportToExcel(options) {
   const ws = XLSX.utils.json_to_sheet(excelRows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31) || 'Report');
-  XLSX.writeFile(wb, `${fileName}.xlsx`);
+  XLSX.writeFile(wb, `${actualFileName}.xlsx`);
 }

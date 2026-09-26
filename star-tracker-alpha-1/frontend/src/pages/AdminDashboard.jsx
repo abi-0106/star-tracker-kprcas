@@ -49,7 +49,7 @@ export default function AdminDashboard() {
           ) : (
             <div className="space-y-8">
               {/* Institution Stats */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="stat-card">
                   <div className="flex items-center justify-between">
                     <div>
@@ -77,7 +77,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="mt-4 text-xs text-emerald-600 dark:text-emerald-400 font-medium border-t border-[var(--border-color)] pt-3">
-                    = {stats?.total_marks || 0} Internal Marks
+                    = {stats?.total_marks || 0} Internal Marks Awarded
                   </div>
                 </div>
 
@@ -92,22 +92,22 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="mt-4 text-xs text-[var(--text-muted)] border-t border-[var(--border-color)] pt-3">
-                    Pending review: {stats?.pending_reviews || 0}
+                    Verified student achievements
                   </div>
                 </div>
 
                 <div className="stat-card">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-semibold">Conversion Ratio</p>
-                      <h3 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">{stats?.sp_to_marks_ratio || 2} SP : 1 Mark</h3>
+                      <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-semibold">Pending Review</p>
+                      <h3 className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{stats?.pending_reviews || 0}</h3>
                     </div>
-                    <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-xl">
-                      <Settings className="w-6 h-6" />
+                    <div className="p-3 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded-xl">
+                      <Clock className="w-6 h-6" />
                     </div>
                   </div>
-                  <div className="mt-4 text-xs text-indigo-600 font-medium border-t border-[var(--border-color)] pt-3">
-                    Configurable in System Rules
+                  <div className="mt-4 text-xs text-[var(--text-muted)] border-t border-[var(--border-color)] pt-3">
+                    Submissions awaiting verification
                   </div>
                 </div>
               </div>

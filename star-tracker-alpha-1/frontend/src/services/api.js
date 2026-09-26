@@ -128,11 +128,20 @@ export const api = {
       body: JSON.stringify({ action, advisor_remarks }),
     }),
 
-  // HOD
+  // HOD & Reports
   getHodDashboard: () => request('/hod/dashboard'),
   getHodStats: () => request('/hod/stats'),
   getHodAdvisors: () => request('/hod/advisors'),
   getHodStudents: () => request('/hod/students'),
+  getDetailedSubmissions: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.class_id) query.append('class_id', params.class_id);
+    if (params.vertical_id) query.append('vertical_id', params.vertical_id);
+    if (params.activity_id) query.append('activity_id', params.activity_id);
+    if (params.status_filter) query.append('status_filter', params.status_filter);
+    const qStr = query.toString();
+    return request(`/reports/detailed-submissions${qStr ? `?${qStr}` : ''}`);
+  },
 
   // Admin
   getAdminStats: () => request('/admin/stats'),

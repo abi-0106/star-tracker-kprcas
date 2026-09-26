@@ -95,64 +95,64 @@ export default function StudentDashboard() {
           </div>
 
           {/* Metric Summary Cards Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
-            {/* Total Star Points */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.15rem', marginBottom: '2rem' }}>
+            {/* 1. Total Star Points */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Total Star Points</span>
-                <Award size={20} color="var(--brand-green)" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Total Star Points</span>
+                <Award size={19} color="var(--brand-green)" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--brand-green)' }}>
-                {scores.total_sp} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ 200 SP</span>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--brand-green)', lineHeight: 1.1 }}>
+                {scores.total_sp} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>/ 200 SP</span>
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
                 Regular: {scores.regular_sp} SP &bull; Bonus: {scores.bonus_sp} SP
               </div>
             </div>
 
-            {/* Internal Marks (100 Scale) */}
+            {/* 2. Internal Marks (100 Scale) */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Internal Marks (100 Scale)</span>
-                <FileText size={20} color="var(--brand-blue)" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Internal Marks (100 Scale)</span>
+                <FileText size={19} color="var(--brand-blue)" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--brand-blue)' }}>
-                {scores.internal_marks_100} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ 100 Marks</span>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--brand-blue)', lineHeight: 1.1 }}>
+                {scores.internal_marks_100} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>/ 100 Marks</span>
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
                 Conversion: <strong>2 Star Points = 1 Mark</strong>
               </div>
             </div>
 
-            {/* Mandatory Verticals Status */}
+            {/* 3. Mandatory Verticals Status */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Mandatory Verticals</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Mandatory Verticals</span>
                 {scores.mandatory_satisfied ? (
-                  <CheckCircle2 size={20} color="var(--brand-green)" />
+                  <CheckCircle2 size={19} color="var(--brand-green)" />
                 ) : (
-                  <AlertTriangle size={20} color="#D97706" />
+                  <AlertTriangle size={19} color="#D97706" />
                 )}
               </div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: scores.mandatory_satisfied ? 'var(--brand-green)' : '#D97706' }}>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: scores.mandatory_satisfied ? 'var(--brand-green)' : '#D97706', lineHeight: 1.1 }}>
                 {scores.mandatory_passed_count} / {scores.mandatory_total_count} Passed
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                {scores.mandatory_satisfied ? 'All mandatory verticals satisfied' : 'Minimum 5 SP required per mandatory vertical'}
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                {scores.mandatory_satisfied ? 'All mandatory verticals satisfied' : 'Min 5 SP needed in mandatory verticals'}
               </div>
             </div>
 
-            {/* Class Rank */}
+            {/* 4. Class Rank */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Class Rank</span>
-                <Trophy size={20} color="#D97706" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Class Rank</span>
+                <Trophy size={19} color="#D97706" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: '#D97706' }}>
-                #{rankInfo.rank} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ {rankInfo.totalStudents}</span>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#D97706', lineHeight: 1.1 }}>
+                #{rankInfo.rank} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>/ {rankInfo.totalStudents}</span>
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                In {user.class_name || 'Class'}
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                In {user.class_name || 'Class Section'}
               </div>
             </div>
           </div>

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import ProofViewerModal from '../components/ProofViewerModal';
 import StudentGalleryModal from '../components/StudentGalleryModal';
 import ExportButton from '../components/ExportButton';
-import { Users, Clock, CheckCircle2, Award, Eye, Search, Folder, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { Users, Clock, CheckCircle2, Award, Eye, Search, Folder, FileText, CheckCircle, XCircle, ShieldCheck, TrendingUp } from 'lucide-react';
 import { api } from '../services/api';
 
 export default function AdvisorDashboard() {
@@ -43,11 +43,11 @@ export default function AdvisorDashboard() {
     );
   }
 
-  const { classInfo, stats, pendingCertificates, reviewedCertificates, students } = data;
+  const { classInfo, stats = { totalStudents: 0, totalPending: 0, totalApproved: 0, avgSP: 0 }, pendingCertificates = [], reviewedCertificates = [], students = [] } = data;
 
   const filteredStudents = (students || []).filter(s =>
-    s.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.reg_no_emp_id?.toLowerCase().includes(searchQuery.toLowerCase())
+    (s.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (s.reg_no_emp_id || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -92,41 +92,47 @@ export default function AdvisorDashboard() {
           </div>
 
           {/* Metric Summary Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1.15rem', marginBottom: '2rem' }}>
+            {/* 1. Total Students */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Total Students</span>
-                <Users size={20} color="var(--brand-blue)" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Total Students</span>
+                <Users size={19} color="var(--brand-blue)" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--brand-blue)' }}>{stats.totalStudents}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Assigned to class section</div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--brand-blue)', lineHeight: 1.1 }}>{stats.totalStudents}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>Assigned to class section</div>
             </div>
 
+            {/* 2. Pending Review */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Pending Review</span>
-                <Clock size={20} color="#D97706" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Pending Review</span>
+                <Clock size={19} color="#D97706" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: '#D97706' }}>{stats.totalPending}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Awaiting verification</div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#D97706', lineHeight: 1.1 }}>{stats.totalPending}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>Awaiting verification</div>
             </div>
 
+            {/* 3. Approved Proofs */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Approved Proofs</span>
-                <CheckCircle2 size={20} color="var(--brand-green)" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Approved Proofs</span>
+                <CheckCircle2 size={19} color="var(--brand-green)" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--brand-green)' }}>{stats.totalApproved}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Verified achievements</div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--brand-green)', lineHeight: 1.1 }}>{stats.totalApproved}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>Verified achievements</div>
             </div>
 
+            {/* 4. Class Average SP */}
             <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Class Average SP</span>
-                <Award size={20} color="var(--brand-green)" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Class Average SP</span>
+                <Award size={19} color="var(--brand-green)" />
               </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--brand-green)' }}>{stats.avgSP} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>SP</span></div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Conversion: 2 SP = 1 Mark</div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--brand-green)', lineHeight: 1.1 }}>
+                {stats.avgSP} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>SP</span>
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>Avg Internal: {(stats.avgSP / 2).toFixed(1)} / 100</div>
             </div>
           </div>
 

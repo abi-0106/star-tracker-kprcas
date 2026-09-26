@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   GraduationCap, UserCheck, Building2, BookOpen, Crown, 
-  Lock, Mail, ArrowRight, Loader2 
+  Lock, Mail, ArrowRight, Loader2, Eye, EyeOff 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -18,7 +18,8 @@ export default function LoginPage() {
 
   // Form inputs
   const [email, setEmail] = useState('student1@kprcas.ac.in');
-  const [password, setPassword] = useState('Password@123');
+  const [password, setPassword] = useState('password123');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -64,11 +65,11 @@ export default function LoginPage() {
     setError('');
     if (section === 'student') {
       setEmail('student1@kprcas.ac.in');
-      setPassword('Password@123');
+      setPassword('password123');
     } else {
       const selected = facultyDesignations.find(f => f.id === facultyRole) || facultyDesignations[0];
       setEmail(selected.email);
-      setPassword('Password@123');
+      setPassword('password123');
     }
   };
 
@@ -76,7 +77,7 @@ export default function LoginPage() {
   const handleSelectFacultyRole = (fRole) => {
     setFacultyRole(fRole.id);
     setEmail(fRole.email);
-    setPassword('Password@123');
+    setPassword('password123');
     setError('');
   };
 
@@ -323,10 +324,10 @@ export default function LoginPage() {
             <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)' }}>
               Password
             </label>
-            <div style={{ position: 'relative' }}>
-              <Lock size={16} style={{ position: 'absolute', left: 14, top: 13, color: 'var(--text-muted)' }} />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <Lock size={16} style={{ position: 'absolute', left: 14, color: 'var(--text-muted)', pointerEvents: 'none' }} />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -335,7 +336,7 @@ export default function LoginPage() {
                 style={{
                   width: '100%',
                   paddingLeft: 42,
-                  paddingRight: 14,
+                  paddingRight: 42,
                   paddingTop: 10,
                   paddingBottom: 10,
                   borderRadius: 10,
@@ -343,6 +344,27 @@ export default function LoginPage() {
                   border: '1px solid rgba(0, 0, 0, 0.12)',
                 }}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  background: 'transparent',
+                  border: 'none',
+                  color: showPassword ? 'var(--brand-green)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 6,
+                  transition: 'color 0.15s ease',
+                }}
+              >
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, Sun, Moon, Bell, Search, User, Menu } from 'lucide-react';
+import { LogOut, Bell, Search, User, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
@@ -52,9 +52,11 @@ export default function Navbar({ onThemeToggle, theme }) {
 
   return (
     <header className="portal-header" style={{
-      background: 'var(--bg-secondary)',
+      background: 'rgba(255, 255, 255, 0.92)',
+      backdropFilter: 'blur(20px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
       borderBottom: '1px solid var(--border-color)',
-      boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
       padding: '0 2rem',
       height: 64,
       display: 'flex',
@@ -62,24 +64,17 @@ export default function Navbar({ onThemeToggle, theme }) {
       justifyContent: 'space-between',
       position: 'sticky',
       top: 0,
-      zIndex: 50,
+      zIndex: 100,
+      width: '100%',
     }}>
       {/* Brand & Mobile Menu Toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         {user && (
           <button
             onClick={() => window.dispatchEvent(new CustomEvent('toggle-sidebar'))}
-            className="mobile-nav-toggle"
+            className="sidebar-hamburger-btn"
             title="Toggle Menu"
-            style={{
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 8,
-              width: 36,
-              height: 36,
-              cursor: 'pointer',
-              color: 'var(--text-primary)',
-            }}
+            aria-label="Toggle Menu"
           >
             <Menu size={20} />
           </button>
@@ -102,34 +97,12 @@ export default function Navbar({ onThemeToggle, theme }) {
                 fontWeight: 700,
               }}>ERP</span>
             </h2>
-            <p className="desktop-sub-header" style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0, fontWeight: 500 }}>
-              KPR College of Arts Science and Research
-            </p>
           </div>
         </div>
       </div>
 
       {/* Right Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        {/* Theme Toggle */}
-        <button
-          onClick={onThemeToggle}
-          title="Toggle Theme"
-          style={{
-            background: 'var(--bg-primary)',
-            border: '1px solid var(--border-color)',
-            borderRadius: 8,
-            width: 36,
-            height: 36,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-        </button>
-
         {/* Notifications */}
         {user && (
           <div style={{ position: 'relative' }}>

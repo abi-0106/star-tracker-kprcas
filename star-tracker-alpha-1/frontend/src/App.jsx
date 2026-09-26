@@ -150,7 +150,22 @@ export default function App() {
             </ProtectedRoute>
           } />
           <Route path="/hod/reports" element={
-            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal']}>
+            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal', 'advisor', 'admin']}>
+              <HodReports />
+            </ProtectedRoute>
+          } />
+          <Route path="/advisor/reports" element={
+            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal', 'advisor', 'admin']}>
+              <HodReports />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/reports" element={
+            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal', 'advisor', 'admin']}>
+              <HodReports />
+            </ProtectedRoute>
+          } />
+          <Route path="/reports" element={
+            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal', 'advisor', 'admin']}>
               <HodReports />
             </ProtectedRoute>
           } />

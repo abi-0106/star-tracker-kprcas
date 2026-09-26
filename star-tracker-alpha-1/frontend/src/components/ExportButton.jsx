@@ -4,7 +4,20 @@ import { exportToPDF, exportToExcel } from '../utils/exportUtils';
 import { api } from '../services/api';
 
 export default function ExportButton(props) {
-  const { buttonText, label, classId, loading: externalLoading, getExportOptions } = props;
+  const {
+    buttonText,
+    label,
+    classId,
+    loading: externalLoading,
+    getExportOptions,
+    data,
+    columns,
+    title,
+    fileName,
+    filename,
+    department,
+    className: classPropName,
+  } = props;
   const displayText = label ?? buttonText ?? 'Export Report';
 
   const [isOpen, setIsOpen] = useState(false);
@@ -12,13 +25,26 @@ export default function ExportButton(props) {
 
   const isLoading = externalLoading || loadingType !== null;
 
+  const resolveOptions = async () => {
+    if (getExportOptions) {
+      return await getExportOptions();
+    }
+    return {
+      title: title || 'Report',
+      department,
+      className: classPropName,
+      columns: columns || [],
+      data: data || [],
+      fileName: fileName || filename || 'star-tracker-report',
+      filename: filename || fileName || 'star-tracker-report',
+    };
+  };
+
   const handleExportPDF = async () => {
     setLoadingType('pdf');
     try {
-      if (getExportOptions) {
-        const options = await getExportOptions();
-        await exportToPDF(options);
-      }
+      const options = await resolveOptions();
+      await exportToPDF(options);
     } catch (err) {
       console.error('PDF Export Error:', err);
     } finally {
@@ -33,8 +59,8 @@ export default function ExportButton(props) {
       if (classId) {
         // Backend pandas export
         await api.exportClassExcel(classId);
-      } else if (getExportOptions) {
-        const options = await getExportOptions();
+      } else {
+        const options = await resolveOptions();
         exportToExcel(options);
       }
     } catch (err) {

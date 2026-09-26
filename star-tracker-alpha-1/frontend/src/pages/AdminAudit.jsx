@@ -3,12 +3,21 @@ import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import ExportButton from '../components/ExportButton';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { ShieldCheck, Search, Filter, Clock } from 'lucide-react';
 
 export default function AdminAudit() {
+  const { user } = useAuth();
   const [logs, setLogs] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState('light');
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+  };
 
   useEffect(() => {
     fetchLogs();
@@ -17,10 +26,10 @@ export default function AdminAudit() {
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const data = await api.get('/api/admin/audit-logs');
+      const data = await api.getAdminAuditLogs();
       setLogs(data.logs || []);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to fetch audit logs:', err);
     } finally {
       setLoading(false);
     }
@@ -29,7 +38,8 @@ export default function AdminAudit() {
   const filteredLogs = logs.filter(l => {
     return l.action?.toLowerCase().includes(search.toLowerCase()) || 
            l.user_name?.toLowerCase().includes(search.toLowerCase()) ||
-           l.entity_type?.toLowerCase().includes(search.toLowerCase());
+           l.entity_type?.toLowerCase().includes(search.toLowerCase()) ||
+           l.details?.toLowerCase().includes(search.toLowerCase());
   });
 
   const exportData = filteredLogs.map(l => ({
@@ -41,103 +51,111 @@ export default function AdminAudit() {
     'Details': l.details || ''
   }));
 
+  const userRole = user?.role || 'admin';
+
   return (
-    <div className="min-h-screen bg-[var(--bg-main)]">
-      <Navbar />
-      <div className="flex">
-        <Sidebar role="admin" />
-        <main className="portal-main flex-1 p-8 max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
+      <Navbar onThemeToggle={toggleTheme} theme={theme} />
+      <div style={{ display: 'flex' }}>
+        <Sidebar userRole={userRole} role={userRole} />
+        <main className="portal-main" style={{ flex: 1, padding: '2rem', maxWidth: 1400 }}>
+          {/* Header */}
+          <div className="glass-card" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, rgba(32,142,71,0.1), rgba(43,77,145,0.1))', border: '1px solid rgba(32,142,71,0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
-              <h1 className="text-2xl font-bold text-[var(--text-main)]">System Audit Trail</h1>
-              <p className="text-sm text-[var(--text-muted)] mt-1">
-                Immutable audit log of all system approvals, modifications, and user actions
+              <span className="badge badge-mandatory" style={{ marginBottom: '0.5rem' }}>SECURITY & COMPLIANCE</span>
+              <h1 style={{ fontSize: '1.8rem', marginBottom: '0.25rem', color: 'var(--brand-blue)' }}>System Audit Trail</h1>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                Immutable audit log of all system approvals, modifications, and user actions.
               </p>
             </div>
-            <ExportButton 
-              data={exportData} 
-              filename="Star_Tracker_Audit_Logs" 
-              title="KPRCAS Star Tracker - System Audit Trail"
-              columns={[
-                { header: 'Timestamp', dataKey: 'Timestamp' },
-                { header: 'User', dataKey: 'User' },
-                { header: 'Action', dataKey: 'Action' },
-                { header: 'Entity', dataKey: 'Entity' },
-                { header: 'Details', dataKey: 'Details' }
-              ]}
-            />
+            <div className="header-actions" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <ExportButton 
+                data={exportData} 
+                filename="Star_Tracker_Audit_Logs" 
+                title="KPRCAS Star Tracker - System Audit Trail"
+                columns={[
+                  { header: 'Timestamp', dataKey: 'Timestamp' },
+                  { header: 'User', dataKey: 'User' },
+                  { header: 'Action', dataKey: 'Action' },
+                  { header: 'Entity', dataKey: 'Entity' },
+                  { header: 'Details', dataKey: 'Details' }
+                ]}
+              />
+            </div>
           </div>
 
           {/* Search */}
-          <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4 mb-6">
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-[var(--text-muted)]" />
+          <div className="glass-card" style={{ marginBottom: '1.5rem', padding: '1rem' }}>
+            <div style={{ position: 'relative', width: '100%', maxWidth: 400 }}>
+              <Search size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input 
                 type="text" 
                 placeholder="Search audit trail by user, action, or entity..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-main)] text-sm text-[var(--text-main)] focus:outline-none focus:border-[var(--primary)]"
+                className="form-input"
+                style={{ paddingLeft: '2.5rem' }}
               />
             </div>
           </div>
 
           {/* Audit Logs Table */}
-          <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-[var(--border-color)] text-xs uppercase font-semibold text-[var(--text-muted)]">
-                  <tr>
-                    <th className="py-3 px-4">Timestamp</th>
-                    <th className="py-3 px-4">User</th>
-                    <th className="py-3 px-4">Action</th>
-                    <th className="py-3 px-4">Entity Type</th>
-                    <th className="py-3 px-4">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border-color)]">
-                  {loading ? (
-                    <tr>
-                      <td colSpan="5" className="text-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary)] mx-auto"></div>
-                      </td>
+          <div className="glass-card">
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '4rem 1rem', color: 'var(--text-secondary)' }}>
+                <p>Loading Audit Logs...</p>
+              </div>
+            ) : filteredLogs.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                <ShieldCheck size={40} style={{ margin: '0 auto 0.5rem', opacity: 0.4 }} />
+                <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>No Audit Records Found</h3>
+                <p>No audit trail records match the search filter.</p>
+              </div>
+            ) : (
+              <div className="table-container" style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                      <th style={{ padding: '0.75rem' }}>Timestamp</th>
+                      <th style={{ padding: '0.75rem' }}>User</th>
+                      <th style={{ padding: '0.75rem' }}>Action</th>
+                      <th style={{ padding: '0.75rem' }}>Entity</th>
+                      <th style={{ padding: '0.75rem' }}>Details</th>
                     </tr>
-                  ) : filteredLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" className="text-center py-12 text-[var(--text-muted)]">
-                        No audit records recorded yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                        <td className="py-3.5 px-4 font-mono text-xs text-[var(--text-muted)] whitespace-nowrap">
+                  </thead>
+                  <tbody>
+                    {filteredLogs.map((log) => (
+                      <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                           {new Date(log.created_at).toLocaleString()}
                         </td>
-                        <td className="py-3.5 px-4 font-medium text-[var(--text-main)]">
+                        <td style={{ padding: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                           {log.user_name || 'System'}
                         </td>
-                        <td className="py-3.5 px-4">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
-                            log.action?.includes('APPROVE') ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
-                            log.action?.includes('REJECT') ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300' :
-                            'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
-                          }`}>
+                        <td style={{ padding: '0.75rem' }}>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            background: log.action?.includes('APPROVE') ? 'rgba(32,142,71,0.12)' : (log.action?.includes('REJECT') ? 'rgba(220,38,38,0.12)' : 'rgba(43,77,145,0.12)'),
+                            color: log.action?.includes('APPROVE') ? 'var(--brand-green)' : (log.action?.includes('REJECT') ? '#DC2626' : 'var(--brand-blue)'),
+                          }}>
                             {log.action}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 font-mono text-xs text-[var(--text-muted)]">
+                        <td style={{ padding: '0.75rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                           {log.entity_type} {log.entity_id ? `#${log.entity_id}` : ''}
                         </td>
-                        <td className="py-3.5 px-4 text-xs text-[var(--text-muted)] max-w-md truncate">
+                        <td style={{ padding: '0.75rem', fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: 400, wordBreak: 'break-word' }}>
                           {log.details || '—'}
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </main>
       </div>
