@@ -710,3 +710,33 @@ input, select, textarea {
   }
 }
 
+/* ── HOD 6-KPI Metric Cards Grid (One Line Desktop Row) ── */
+.hod-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 2rem;
+}
+
+.hod-kpi-card {
+  padding: 1rem 0.85rem !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+@media (max-width: 1280px) {
+  .hod-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .hod-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+}
+

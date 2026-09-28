@@ -24,7 +24,25 @@ import AdvisorStudentGallery from './pages/AdvisorStudentGallery';
 import HodDashboard from './pages/HodDashboard';
 import HodAdvisors from './pages/HodAdvisors';
 import HodAnalytics from './pages/HodAnalytics';
+import HodSwot from './pages/HodSwot';
 import HodReports from './pages/HodReports';
+
+// Dean
+import DeanDashboard from './pages/DeanDashboard';
+import DeanDepartments from './pages/DeanDepartments';
+import DeanVerticals from './pages/DeanVerticals';
+import DeanStudents from './pages/DeanStudents';
+import DeanLeaderboard from './pages/DeanLeaderboard';
+import DeanSwot from './pages/DeanSwot';
+import DeanReports from './pages/DeanReports';
+
+// Principal
+import PrincipalDashboard from './pages/PrincipalDashboard';
+import PrincipalSchools from './pages/PrincipalSchools';
+import PrincipalProgrammes from './pages/PrincipalProgrammes';
+import PrincipalStudents from './pages/PrincipalStudents';
+import PrincipalAchievements from './pages/PrincipalAchievements';
+import PrincipalReports from './pages/PrincipalReports';
 
 // Admin
 import AdminDashboard from './pages/AdminDashboard';
@@ -52,7 +70,9 @@ function ProtectedRoute({ children, allowedRoles }) {
     // Redirect to respective dashboard if role doesn't match
     if (user.role === 'student') return <Navigate to="/student/dashboard" replace />;
     if (user.role === 'advisor') return <Navigate to="/advisor/dashboard" replace />;
-    if (user.role === 'hod' || user.role === 'dean' || user.role === 'principal') return <Navigate to="/hod/dashboard" replace />;
+    if (user.role === 'hod') return <Navigate to="/hod/dashboard" replace />;
+    if (user.role === 'dean') return <Navigate to="/dean/dashboard" replace />;
+    if (user.role === 'principal') return <Navigate to="/principal/dashboard" replace />;
     if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
     return <Navigate to="/" replace />;
   }
@@ -149,6 +169,11 @@ export default function App() {
               <HodAnalytics />
             </ProtectedRoute>
           } />
+          <Route path="/hod/swot" element={
+            <ProtectedRoute allowedRoles={['hod', 'dean', 'principal', 'admin']}>
+              <HodSwot />
+            </ProtectedRoute>
+          } />
           <Route path="/hod/reports" element={
             <ProtectedRoute allowedRoles={['hod', 'dean', 'principal', 'advisor', 'admin']}>
               <HodReports />
@@ -167,6 +192,85 @@ export default function App() {
           <Route path="/reports" element={
             <ProtectedRoute allowedRoles={['hod', 'dean', 'principal', 'advisor', 'admin']}>
               <HodReports />
+            </ProtectedRoute>
+          } />
+
+          {/* Dean Routes */}
+          <Route path="/dean" element={
+            <ProtectedRoute allowedRoles={['dean', 'principal', 'admin']}>
+              <DeanDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/dean/dashboard" element={
+            <ProtectedRoute allowedRoles={['dean', 'principal', 'admin']}>
+              <DeanDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/dean/departments" element={
+            <ProtectedRoute allowedRoles={['dean', 'principal', 'admin']}>
+              <DeanDepartments />
+            </ProtectedRoute>
+          } />
+          <Route path="/dean/verticals" element={
+            <ProtectedRoute allowedRoles={['dean', 'principal', 'admin']}>
+              <DeanVerticals />
+            </ProtectedRoute>
+          } />
+          <Route path="/dean/students" element={
+            <ProtectedRoute allowedRoles={['dean', 'principal', 'admin']}>
+              <DeanStudents />
+            </ProtectedRoute>
+          } />
+          <Route path="/dean/leaderboard" element={
+            <ProtectedRoute allowedRoles={['dean', 'principal', 'admin']}>
+              <DeanLeaderboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/dean/swot" element={
+            <ProtectedRoute allowedRoles={['dean', 'principal', 'admin']}>
+              <DeanSwot />
+            </ProtectedRoute>
+          } />
+          <Route path="/dean/reports" element={
+            <ProtectedRoute allowedRoles={['dean', 'principal', 'admin']}>
+              <DeanReports />
+            </ProtectedRoute>
+          } />
+
+          {/* Principal Routes */}
+          <Route path="/principal" element={
+            <ProtectedRoute allowedRoles={['principal', 'admin']}>
+              <PrincipalDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/principal/dashboard" element={
+            <ProtectedRoute allowedRoles={['principal', 'admin']}>
+              <PrincipalDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/principal/schools" element={
+            <ProtectedRoute allowedRoles={['principal', 'admin']}>
+              <PrincipalSchools />
+            </ProtectedRoute>
+          } />
+          <Route path="/principal/programmes" element={
+            <ProtectedRoute allowedRoles={['principal', 'admin']}>
+              <PrincipalProgrammes />
+            </ProtectedRoute>
+          } />
+          <Route path="/principal/students" element={
+            <ProtectedRoute allowedRoles={['principal', 'admin']}>
+              <PrincipalStudents />
+            </ProtectedRoute>
+          } />
+          <Route path="/principal/achievements" element={
+            <ProtectedRoute allowedRoles={['principal', 'admin']}>
+              <PrincipalAchievements />
+            </ProtectedRoute>
+          } />
+          <Route path="/principal/reports" element={
+            <ProtectedRoute allowedRoles={['principal', 'admin']}>
+              <PrincipalReports />
             </ProtectedRoute>
           } />
 

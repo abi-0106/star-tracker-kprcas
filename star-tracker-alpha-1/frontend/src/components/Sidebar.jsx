@@ -80,17 +80,24 @@ export default function Sidebar({ userRole, role }) {
     hod: [
       { label: 'Dashboard',   href: '/hod/dashboard',        icon: LayoutDashboard },
       { label: 'Analytics',   href: '/hod/analytics',        icon: Building },
+      { label: 'SWOT Analysis', href: '/hod/swot',           icon: ShieldCheck },
       { label: 'Leaderboard', href: '/leaderboard',          icon: Trophy },
     ],
     dean: [
-      { label: 'Dashboard',   href: '/hod/dashboard',        icon: LayoutDashboard },
-      { label: 'Analytics',   href: '/hod/analytics',        icon: Building },
-      { label: 'Leaderboard', href: '/leaderboard',          icon: Trophy },
+      { label: 'Dashboard',   href: '/dean/dashboard',       icon: LayoutDashboard },
+      { label: 'Departments', href: '/dean/departments',     icon: Building },
+      { label: 'Verticals',   href: '/dean/verticals',       icon: Layers },
+      { label: 'Students',    href: '/dean/students',        icon: Users },
+      { label: 'Leaderboard', href: '/dean/leaderboard',     icon: Trophy },
+      { label: 'SWOT Analysis', href: '/dean/swot',          icon: ShieldCheck },
     ],
     principal: [
-      { label: 'Dashboard',   href: '/hod/dashboard',        icon: LayoutDashboard },
-      { label: 'Analytics',   href: '/hod/analytics',        icon: Building },
-      { label: 'Leaderboard', href: '/leaderboard',          icon: Trophy },
+      { label: 'Dashboard',    href: '/principal/dashboard',    icon: LayoutDashboard },
+      { label: 'Schools',      href: '/principal/schools',      icon: Building },
+      { label: 'Programmes',   href: '/principal/programmes',   icon: Layers },
+      { label: 'Students',     href: '/principal/students',     icon: Users },
+      { label: 'Achievements', href: '/principal/achievements', icon: Award },
+      { label: 'Reports',      href: '/principal/reports',      icon: FileText },
     ],
     admin: [
       { label: 'Dashboard',   href: '/admin/dashboard',      icon: LayoutDashboard },
@@ -111,11 +118,9 @@ export default function Sidebar({ userRole, role }) {
       { label: 'Advisors Roster', href: '/hod/advisors',   icon: Users },
     ],
     dean: [
-      { label: 'Advisors Roster', href: '/hod/advisors',   icon: Users },
+      { label: 'Executive Reports', href: '/dean/reports', icon: FileText, highlight: true },
     ],
-    principal: [
-      { label: 'Advisors Roster', href: '/hod/advisors',   icon: Users },
-    ],
+    principal: [],
     admin: [
       { label: 'Rules & Engine', href: '/admin/rules',     icon: Settings },
       { label: 'Manage Users',   href: '/admin/users',     icon: Users },
@@ -135,15 +140,12 @@ export default function Sidebar({ userRole, role }) {
       { label: 'Student Achievements',    href: '/hod/reports?type=sub_vertical', icon: Award, highlight: true },
     ],
     dean: [
-      { label: 'IQAC Mark Sheets',        href: '/hod/reports?type=consolidated', icon: FileText },
-      { label: 'Vertical-Wise Report',    href: '/hod/reports?type=vertical',     icon: Layers },
-      { label: 'Student Achievements',    href: '/hod/reports?type=sub_vertical', icon: Award, highlight: true },
+      { label: 'Institutional Summary',  href: '/dean/reports?type=institution_summary',   icon: FileText },
+      { label: 'Department Comparison',  href: '/dean/reports?type=department_comparison', icon: Building },
+      { label: 'Vertical Matrix',        href: '/dean/reports?type=vertical_matrix',       icon: Layers },
+      { label: 'Student Roster',         href: '/dean/reports?type=student_roster',        icon: Award },
     ],
-    principal: [
-      { label: 'IQAC Mark Sheets',        href: '/hod/reports?type=consolidated', icon: FileText },
-      { label: 'Vertical-Wise Report',    href: '/hod/reports?type=vertical',     icon: Layers },
-      { label: 'Student Achievements',    href: '/hod/reports?type=sub_vertical', icon: Award, highlight: true },
-    ],
+    principal: [],
     admin: [
       { label: 'IQAC Mark Sheets',        href: '/hod/reports?type=consolidated', icon: FileText },
       { label: 'Vertical-Wise Report',    href: '/hod/reports?type=vertical',     icon: Layers },

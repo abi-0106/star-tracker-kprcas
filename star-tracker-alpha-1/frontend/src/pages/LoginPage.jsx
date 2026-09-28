@@ -97,8 +97,8 @@ export default function LoginPage() {
         student: '/student/dashboard',
         advisor: '/advisor/dashboard',
         hod: '/hod/dashboard',
-        dean: '/hod/dashboard',
-        principal: '/hod/dashboard',
+        dean: '/dean/dashboard',
+        principal: '/principal/dashboard',
         admin: '/admin/dashboard',
       };
 

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
-import ExportButton from '../components/ExportButton';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -15,8 +14,61 @@ import {
   Activity, 
   FileCheck, 
   Percent,
-  ChevronRight
+  ChevronRight,
+  PieChart as PieChartIcon
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend
+} from 'recharts';
+
+const PIE_COLORS = [
+  '#208E47', // Brand Green
+  '#2B4D91', // Brand Blue
+  '#0284C7', // Sky Blue
+  '#D97706', // Amber
+  '#7C3AED', // Purple
+  '#EC4899', // Pink
+  '#10B981', // Emerald
+  '#F59E0B', // Orange
+  '#6366F1', // Indigo
+  '#14B8A6'  // Teal
+];
+
+// Custom Tooltip Component for Charts
+const ChartTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{
+        background: 'var(--bg-secondary)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 8,
+        padding: '0.65rem 0.85rem',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+        fontSize: '0.78rem'
+      }}>
+        <p style={{ fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 0.35rem 0' }}>
+          {label || payload[0].name}
+        </p>
+        {payload.map((entry, index) => (
+          <p key={index} style={{ margin: '0.2rem 0', color: entry.color || entry.fill, fontWeight: 600 }}>
+            {entry.name}: <strong>{entry.value} {entry.unit || ''}</strong>
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
 
 export default function HodAnalytics() {
   const { user } = useAuth();
@@ -86,6 +138,72 @@ export default function HodAnalytics() {
     return computed > 0 ? computed : 1;
   }, [stats, verticalStatsMap]);
 
+  // 1. Data for Vertical Points Bar Chart
+  const verticalBarData = useMemo(() => {
+    return verticals.map(v => {
+      const vStats = verticalStatsMap[v.id] || { totalSP: 0, studentCount: 0, approvedCount: 0 };
+      return {
+        code: v.code,
+        name: `${v.code} - ${v.name}`,
+        shortName: v.code,
+        points: vStats.totalSP,
+        marks: Number((vStats.totalSP / 2).toFixed(1)),
+        students: vStats.studentCount,
+        approved: vStats.approvedCount
+      };
+    });
+  }, [verticals, verticalStatsMap]);
+
+  // 2. Data for Vertical Points Share Pie/Donut Chart
+  const verticalPieData = useMemo(() => {
+    const active = verticals
+      .map(v => {
+        const vStats = verticalStatsMap[v.id] || { totalSP: 0 };
+        return {
+          name: `${v.code} - ${v.name}`,
+          code: v.code,
+          value: vStats.totalSP,
+          type: v.type
+        };
+      })
+      .filter(item => item.value > 0);
+
+    if (active.length === 0) {
+      return verticals.slice(0, 5).map(v => ({
+        name: `${v.code} - ${v.name}`,
+        code: v.code,
+        value: 1,
+        type: v.type
+      }));
+    }
+    return active;
+  }, [verticals, verticalStatsMap]);
+
+  // 3. Data for Class Section Comparison Bar Chart
+  const classBarData = useMemo(() => {
+    return classes.map(cls => ({
+      name: `${cls.name} (${cls.section || 'Sec'})`,
+      avgSP: Number(cls.avg_sp || 0),
+      students: Number(cls.student_count || 0),
+      pending: Number(cls.pending_count || 0)
+    }));
+  }, [classes]);
+
+  // 4. Data for Submissions Verification Status Pie Chart
+  const submissionStatusData = useMemo(() => {
+    const approved = stats?.total_approved || submissions.filter(s => s.status === 'approved').length;
+    const pending = stats?.pending_reviews || submissions.filter(s => s.status === 'pending').length;
+    const rejected = submissions.filter(s => s.status === 'rejected').length;
+
+    const dataArr = [
+      { name: 'Approved', value: approved, color: '#208E47' },
+      { name: 'Pending Review', value: pending, color: '#D97706' },
+      { name: 'Returned / Rejected', value: rejected, color: '#DC2626' }
+    ].filter(d => d.value > 0);
+
+    return dataArr.length > 0 ? dataArr : [{ name: 'Approved', value: 1, color: '#208E47' }];
+  }, [stats, submissions]);
+
   const exportData = [
     { Metric: 'Total Enrolled Students', Value: stats?.total_students || 0 },
     { Metric: 'Total Star Points Generated', Value: stats?.total_points || stats?.total_sp || 0 },
@@ -148,17 +266,6 @@ export default function HodAnalytics() {
                 <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                 <span>Refresh</span>
               </button>
-
-              <ExportButton 
-                buttonText="Export Metrics"
-                data={exportData} 
-                filename="Department_Analytics_Summary" 
-                title="Department Performance & Metrics Summary"
-                columns={[
-                  { header: 'Metric', dataKey: 'Metric' },
-                  { header: 'Value', dataKey: 'Value' }
-                ]}
-              />
             </div>
           </div>
 
@@ -223,6 +330,205 @@ export default function HodAnalytics() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* ============================================================= */}
+              {/* INTERACTIVE GRAPH KPI CARDS (BAR & PIE CHARTS)                */}
+              {/* ============================================================= */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '1.5rem' }}>
+                
+                {/* 1. Bar Chart: Vertical-Wise Star Points Distribution */}
+                <div className="glass-card" style={{ padding: '1.4rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.65rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(32,142,71,0.12)', color: 'var(--brand-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <BarChart3 size={18} />
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--brand-blue)', margin: 0 }}>
+                          Vertical Star Points Distribution
+                        </h3>
+                        <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+                          Points (SP) awarded across V1–V10
+                        </p>
+                      </div>
+                    </div>
+                    <span className="badge badge-approved" style={{ fontSize: '0.68rem' }}>10 Verticals</span>
+                  </div>
+
+                  <div style={{ width: '100%', height: 280 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={verticalBarData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.6} />
+                        <XAxis 
+                          dataKey="shortName" 
+                          tick={{ fontSize: 11, fill: 'var(--text-secondary)' }}
+                          interval={0}
+                        />
+                        <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                        <Tooltip content={<ChartTooltip />} />
+                        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
+                        <Bar 
+                          dataKey="points" 
+                          name="Star Points (SP)" 
+                          fill="var(--brand-green)" 
+                          radius={[6, 6, 0, 0]} 
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* 2. Pie Chart: Vertical Points Share Breakdown */}
+                <div className="glass-card" style={{ padding: '1.4rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.65rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(43,77,145,0.12)', color: 'var(--brand-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <PieChartIcon size={18} />
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--brand-blue)', margin: 0 }}>
+                          Curriculum Points Share
+                        </h3>
+                        <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+                          Proportional department point distribution
+                        </p>
+                      </div>
+                    </div>
+                    <span className="badge badge-optional" style={{ fontSize: '0.68rem' }}>% Share</span>
+                  </div>
+
+                  <div style={{ width: '100%', height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Tooltip content={<ChartTooltip />} />
+                        <Pie
+                          data={verticalPieData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={95}
+                          paddingAngle={3}
+                          label={({ code, percent }) => `${code} (${(percent * 100).toFixed(0)}%)`}
+                          labelLine={false}
+                        >
+                          {verticalPieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Legend 
+                          layout="horizontal" 
+                          verticalAlign="bottom" 
+                          align="center"
+                          wrapperStyle={{ fontSize: 11, maxHeight: 45, overflowY: 'auto' }}
+                          formatter={(value) => value.length > 20 ? `${value.slice(0, 20)}...` : value}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* 3. Bar Chart: Class Sections Average Performance */}
+                {classBarData.length > 0 && (
+                  <div className="glass-card" style={{ padding: '1.4rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(217,119,6,0.12)', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Users size={18} />
+                        </div>
+                        <div>
+                          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--brand-blue)', margin: 0 }}>
+                            Class Sections Average Performance
+                          </h3>
+                          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+                            Average Star Points & Student Enrolment
+                          </p>
+                        </div>
+                      </div>
+                      <span className="badge badge-mandatory" style={{ fontSize: '0.68rem' }}>Sections</span>
+                    </div>
+
+                    <div style={{ width: '100%', height: 260 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={classBarData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.6} />
+                          <XAxis 
+                            dataKey="name" 
+                            tick={{ fontSize: 11, fill: 'var(--text-secondary)' }}
+                          />
+                          <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                          <Tooltip content={<ChartTooltip />} />
+                          <Legend wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
+                          <Bar 
+                            dataKey="avgSP" 
+                            name="Class Average (SP)" 
+                            fill="var(--brand-green)" 
+                            radius={[6, 6, 0, 0]} 
+                          />
+                          <Bar 
+                            dataKey="students" 
+                            name="Students Enrolled" 
+                            fill="#0284C7" 
+                            radius={[6, 6, 0, 0]} 
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Pie Chart: Verification Queue & Submission Status */}
+                <div className="glass-card" style={{ padding: '1.4rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.65rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(32,142,71,0.12)', color: 'var(--brand-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <FileCheck size={18} />
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--brand-blue)', margin: 0 }}>
+                          Submissions Verification Status
+                        </h3>
+                        <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+                          Approved vs Pending review backlog
+                        </p>
+                      </div>
+                    </div>
+                    <span className="badge badge-approved" style={{ fontSize: '0.68rem' }}>Status</span>
+                  </div>
+
+                  <div style={{ width: '100%', height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Tooltip content={<ChartTooltip />} />
+                        <Pie
+                          data={submissionStatusData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={55}
+                          outerRadius={85}
+                          paddingAngle={4}
+                          label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                          labelLine={false}
+                        >
+                          {submissionStatusData.map((entry, index) => (
+                            <Cell key={`status-cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Legend 
+                          layout="horizontal" 
+                          verticalAlign="bottom" 
+                          align="center"
+                          wrapperStyle={{ fontSize: 12 }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
               </div>
 
               {/* ============================================================= */}

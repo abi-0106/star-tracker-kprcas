@@ -133,6 +133,7 @@ export const api = {
   getHodStats: () => request('/hod/stats'),
   getHodAdvisors: () => request('/hod/advisors'),
   getHodStudents: () => request('/hod/students'),
+  getHodSwot: () => request('/hod/swot'),
   getDetailedSubmissions: (params = {}) => {
     const query = new URLSearchParams();
     if (params.class_id) query.append('class_id', params.class_id);
@@ -141,6 +142,74 @@ export const api = {
     if (params.status_filter) query.append('status_filter', params.status_filter);
     const qStr = query.toString();
     return request(`/reports/detailed-submissions${qStr ? `?${qStr}` : ''}`);
+  },
+
+  // Dean Executive Endpoints
+  getDeanDashboard: () => request('/dean/dashboard'),
+  getDeanDepartments: (deptId) => request(`/dean/departments${deptId ? `?department_id=${deptId}` : ''}`),
+  getDeanVerticals: (verticalId) => request(`/dean/verticals${verticalId ? `?vertical_id=${verticalId}` : ''}`),
+  getDeanStudents: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.search) q.append('search', params.search);
+    if (params.department_id) q.append('department_id', params.department_id);
+    if (params.class_id) q.append('class_id', params.class_id);
+    if (params.vertical_id) q.append('vertical_id', params.vertical_id);
+    if (params.activity_id) q.append('activity_id', params.activity_id);
+    if (params.status) q.append('status', params.status);
+    if (params.year) q.append('year', params.year);
+    if (params.page) q.append('page', params.page);
+    if (params.limit) q.append('limit', params.limit);
+    const qStr = q.toString();
+    return request(`/dean/students${qStr ? `?${qStr}` : ''}`);
+  },
+  getDeanStudentDetail: (id) => request(`/dean/students/${id}`),
+  getDeanSwot: () => request('/dean/swot'),
+  getDeanReports: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.type) q.append('type', params.type);
+    if (params.department_id) q.append('department_id', params.department_id);
+    if (params.vertical_id) q.append('vertical_id', params.vertical_id);
+    const qStr = q.toString();
+    return request(`/dean/reports${qStr ? `?${qStr}` : ''}`);
+  },
+
+  // Principal College-Wide Executive Endpoints
+  getPrincipalDashboard: () => request('/principal/dashboard'),
+  getPrincipalSchools: () => request('/principal/schools'),
+  getPrincipalProgrammes: (params = {}) => {
+    const schoolId = typeof params === 'object' ? params?.school_id : params;
+    return request(`/principal/programmes${schoolId ? `?school_id=${schoolId}` : ''}`);
+  },
+  getPrincipalStudents: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.search) q.append('search', params.search);
+    if (params.school_id) q.append('school_id', params.school_id);
+    if (params.department_id) q.append('department_id', params.department_id);
+    if (params.class_id) q.append('class_id', params.class_id);
+    if (params.page) q.append('page', params.page);
+    if (params.page_size || params.limit) q.append('page_size', params.page_size || params.limit);
+    const qStr = q.toString();
+    return request(`/principal/students${qStr ? `?${qStr}` : ''}`);
+  },
+  getPrincipalAchievements: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.search) q.append('search', params.search);
+    if (params.school_id) q.append('school_id', params.school_id);
+    if (params.department_id) q.append('department_id', params.department_id);
+    if (params.vertical_id) q.append('vertical_id', params.vertical_id);
+    if (params.status) q.append('status', params.status);
+    if (params.page) q.append('page', params.page);
+    if (params.page_size || params.limit) q.append('page_size', params.page_size || params.limit);
+    const qStr = q.toString();
+    return request(`/principal/achievements${qStr ? `?${qStr}` : ''}`);
+  },
+  getPrincipalReports: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.type) q.append('type', params.type);
+    if (params.school_id) q.append('school_id', params.school_id);
+    if (params.department_id) q.append('department_id', params.department_id);
+    const qStr = q.toString();
+    return request(`/principal/reports${qStr ? `?${qStr}` : ''}`);
   },
 
   // Admin
@@ -175,8 +244,16 @@ export const api = {
   getAdminAuditLogs: () => request('/admin/audit-logs'),
 
   // Leaderboard
-  getLeaderboard: (classId) =>
-    request(`/leaderboard${classId ? `?class_id=${classId}` : ''}`),
+  getLeaderboard: (params = {}) => {
+    if (typeof params === 'object' && params !== null) {
+      const q = new URLSearchParams();
+      if (params.class_id || params.classId) q.append('class_id', params.class_id || params.classId);
+      if (params.year) q.append('year', params.year);
+      const qStr = q.toString();
+      return request(`/leaderboard${qStr ? `?${qStr}` : ''}`);
+    }
+    return request(`/leaderboard${params ? `?class_id=${params}` : ''}`);
+  },
 
   // Notifications
   getNotifications: () => request('/notifications'),

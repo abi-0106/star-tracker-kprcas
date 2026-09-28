@@ -209,11 +209,13 @@ def get_current_user(request: Request) -> Dict[str, Any]:
 
     user_id = payload.get("sub")
     user = Database.query_one("""
-        SELECT u.id, u.reg_no_emp_id, u.name, u.email, u.role, u.department_id, u.class_id,
+        SELECT u.id, u.reg_no_emp_id, u.name, u.email, u.role, u.school_id, u.department_id, u.class_id,
                u.year, u.semester, u.phone, u.avatar_url, u.status,
+               sch.name AS school_name, sch.code AS school_code,
                d.name AS department_name, d.code AS department_code,
                c.name AS class_name, c.section AS class_section, c.batch_year
         FROM users u
+        LEFT JOIN schools sch ON u.school_id = sch.id
         LEFT JOIN departments d ON u.department_id = d.id
         LEFT JOIN classes c ON u.class_id = c.id
         WHERE u.id = %s AND u.is_deleted = 0
@@ -223,6 +225,19 @@ def get_current_user(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if user.get("status") != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active")
+
+    # If Dean doesn't have school_id explicitly, check if assigned in schools table
+    if user.get("role") == "dean" and not user.get("school_id"):
+        sch_match = Database.query_one("SELECT id, name, code FROM schools WHERE dean_id = %s", (user["id"],))
+        if sch_match:
+            user["school_id"] = sch_match["id"]
+            user["school_name"] = sch_match["name"]
+            user["school_code"] = sch_match["code"]
+        else:
+            # Default to School of Computing Science (School 5)
+            user["school_id"] = 5
+            user["school_name"] = "School of Computing Science"
+            user["school_code"] = "SOCS"
 
     return user
 
@@ -1027,7 +1042,7 @@ def hod_dashboard(user: Dict[str, Any] = Depends(require_role(["hod", "admin", "
         LEFT JOIN classes c ON u.class_id = c.id
         WHERE u.department_id = %s AND u.role = 'student' AND u.is_deleted = 0
         ORDER BY s.total_sp DESC
-        LIMIT 10
+        LIMIT 200
     """, (dept_id,))
 
     # Vertical breakdown
@@ -1189,11 +1204,18 @@ def admin_stats(user: Dict[str, Any] = Depends(require_role(["admin"]))):
 # LEADERBOARD ENDPOINTS
 # -------------------------------------------------------------
 @app.get("/api/leaderboard")
-def leaderboard(class_id: Optional[int] = None, user: Dict[str, Any] = Depends(get_current_user)):
+def leaderboard(
+    class_id: Optional[int] = None,
+    year: Optional[int] = None,
+    user: Dict[str, Any] = Depends(get_current_user)
+):
     dept_id = user.get("department_id") or 1
-    classes = Database.query("SELECT id, name, section, batch_year FROM classes WHERE department_id = %s ORDER BY name ASC", (dept_id,))
+    user_role = user.get("role")
 
-    target_class_id = user.get("class_id") if user["role"] == "student" else (class_id or (classes[0]["id"] if classes else None))
+    if user_role in ["hod", "advisor", "student"]:
+        classes = Database.query("SELECT id, name, section, batch_year FROM classes WHERE department_id = %s ORDER BY name ASC", (dept_id,))
+    else:
+        classes = Database.query("SELECT id, name, section, batch_year FROM classes ORDER BY name ASC")
 
     sql = """
         SELECT s.student_id AS id, s.total_sp, s.bonus_sp, s.internal_marks_100, s.mandatory_satisfied,
@@ -1206,24 +1228,1164 @@ def leaderboard(class_id: Optional[int] = None, user: Dict[str, Any] = Depends(g
         WHERE u.role = 'student' AND u.is_deleted = 0
     """
     params = []
-    if target_class_id:
+
+    # If HOD, advisor, or student, strictly restrict to their department!
+    if user_role in ["hod", "advisor", "student"]:
+        sql += " AND u.department_id = %s"
+        params.append(dept_id)
+
+    if user_role == "student":
+        if user.get("class_id"):
+            sql += " AND u.class_id = %s"
+            params.append(user.get("class_id"))
+    elif class_id:
         sql += " AND u.class_id = %s"
-        params.append(target_class_id)
+        params.append(class_id)
+
+    if year:
+        sql += " AND u.year = %s"
+        params.append(year)
+
     sql += " ORDER BY s.total_sp DESC"
 
     students = Database.query(sql, tuple(params))
     for idx, s in enumerate(students):
         s["rank"] = idx + 1
 
-    active_class = next((c for c in classes if c["id"] == target_class_id), None)
+    active_class = next((c for c in classes if c["id"] == class_id), None) if class_id else None
 
     return {
         "user": user,
         "classes": classes,
-        "selectedClassId": target_class_id,
+        "selectedClassId": class_id,
+        "selectedYear": year,
         "activeClass": active_class,
         "leaderboard": students
     }
+
+@app.get("/api/hod/swot")
+def hod_swot(user: Dict[str, Any] = Depends(require_role(["hod", "admin", "dean", "principal"]))):
+    dept_id = user.get("department_id") or 14
+    department = Database.query_one("SELECT id, name, code, school_id FROM departments WHERE id = %s", (dept_id,))
+    if not department:
+        department = Database.query_one("SELECT id, name, code, school_id FROM departments ORDER BY id ASC LIMIT 1")
+        dept_id = department["id"] if department else 14
+
+    classes = Database.query("""
+        SELECT c.id, c.name, c.section, c.batch_year,
+               adv.name AS advisor_name
+        FROM classes c
+        LEFT JOIN users adv ON c.advisor_id = adv.id
+        WHERE c.department_id = %s
+        ORDER BY c.name ASC, c.section ASC
+    """, (dept_id,))
+
+    students = Database.query("""
+        SELECT u.id, u.name, u.year, u.class_id, s.total_sp, s.bonus_sp, s.mandatory_satisfied
+        FROM users u
+        LEFT JOIN student_summaries s ON u.id = s.student_id
+        WHERE u.department_id = %s AND u.role = 'student' AND u.is_deleted = 0
+    """, (dept_id,))
+    total_students = len(students) if len(students) > 0 else 1
+
+    tot_dept_sp = sum(float(s["total_sp"] or 0) for s in students)
+    avg_dept_sp = round(tot_dept_sp / total_students, 1)
+
+    # 1. Strengths (S)
+    strengths = []
+    top_verticals = Database.query("""
+        SELECT v.code, v.name, COUNT(DISTINCT a.student_id) as participants,
+               COALESCE(SUM(CASE WHEN a.status = 'approved' THEN a.claimed_sp ELSE 0 END), 0) as total_sp
+        FROM verticals v
+        JOIN activities act ON v.id = act.vertical_id
+        JOIN achievements a ON act.id = a.activity_id AND a.is_deleted = 0
+        JOIN users u ON a.student_id = u.id
+        WHERE v.is_active = 1 AND u.department_id = %s
+        GROUP BY v.id, v.code, v.name
+        ORDER BY participants DESC, total_sp DESC
+        LIMIT 3
+    """, (dept_id,))
+    for v in top_verticals:
+        p_count = v["participants"]
+        v_sp = int(float(v["total_sp"]))
+        p_pct = round((p_count / total_students) * 100, 1)
+        strengths.append({
+            "title": f"High Engagement in {v['name']}",
+            "description": f"{p_count} students ({p_pct}% departmental reach) participated with {v_sp} approved Star Points awarded.",
+            "metric": f"{v_sp} SP",
+            "type": "vertical"
+        })
+
+    class_stats = []
+    for cls in classes:
+        cls_st = [s for s in students if s["class_id"] == cls["id"]]
+        if cls_st:
+            cls_sp = sum(float(s["total_sp"] or 0) for s in cls_st)
+            cls_avg = round(cls_sp / len(cls_st), 1)
+            class_stats.append({
+                "name": f"{cls['name']} - Sec {cls['section']}",
+                "students": len(cls_st),
+                "total_sp": int(cls_sp),
+                "avg_sp": cls_avg
+            })
+    class_stats.sort(key=lambda x: x["total_sp"], reverse=True)
+    if class_stats and class_stats[0]["total_sp"] > 0:
+        top_cls = class_stats[0]
+        strengths.append({
+            "title": f"Leading Cohort: {top_cls['name']}",
+            "description": f"Dominates departmental performance with {top_cls['total_sp']} total SP across {top_cls['students']} students (Avg {top_cls['avg_sp']} SP/student).",
+            "metric": f"Avg {top_cls['avg_sp']} SP",
+            "type": "cohort"
+        })
+
+    # 2. Weaknesses (W)
+    weaknesses = []
+    low_verticals = Database.query("""
+        SELECT v.code, v.name, COUNT(DISTINCT a.student_id) as participants
+        FROM verticals v
+        LEFT JOIN activities act ON v.id = act.vertical_id
+        LEFT JOIN achievements a ON act.id = a.activity_id AND a.is_deleted = 0
+        LEFT JOIN users u ON a.student_id = u.id AND u.department_id = %s
+        WHERE v.is_active = 1
+        GROUP BY v.id, v.code, v.name
+        ORDER BY participants ASC
+        LIMIT 3
+    """, (dept_id,))
+    for v in low_verticals:
+        p_pct = round((v["participants"] / total_students) * 100, 1)
+        weaknesses.append({
+            "title": f"Subdued Participation in {v['name']}",
+            "description": f"Only {v['participants']} students ({p_pct}% reach) in the department have earned approved points here.",
+            "metric": f"{p_pct}% Reach",
+            "type": "vertical"
+        })
+
+    inactive_students = [s for s in students if not s["total_sp"] or float(s["total_sp"]) == 0]
+    if inactive_students:
+        inact_pct = round((len(inactive_students) / total_students) * 100, 1)
+        weaknesses.append({
+            "title": "Zero-Point Inactive Student Cohort",
+            "description": f"{len(inactive_students)} students ({inact_pct}% of department) currently have zero recorded Star Points.",
+            "metric": f"{len(inactive_students)} Students",
+            "type": "cohort"
+        })
+
+    # 3. Opportunities (O)
+    opportunities = []
+    opp_acts = Database.query("""
+        SELECT act.name, v.name as vertical_name, act.max_sp,
+               COUNT(a.id) as subs
+        FROM activities act
+        JOIN verticals v ON act.vertical_id = v.id
+        LEFT JOIN achievements a ON act.id = a.activity_id AND a.is_deleted = 0
+        LEFT JOIN users u ON a.student_id = u.id AND u.department_id = %s
+        WHERE act.is_bonus_eligible = 1 AND act.is_active = 1
+        GROUP BY act.id, act.name, v.name, act.max_sp
+        ORDER BY subs ASC
+        LIMIT 3
+    """, (dept_id,))
+    for o in opp_acts:
+        opportunities.append({
+            "title": f"Promote Bonus-Eligible: {o['name']}",
+            "description": f"Provides accelerated Star Points up to {o['max_sp']} SP under {o['vertical_name']} for students.",
+            "metric": f"Up to {o['max_sp']} SP",
+            "type": "activity"
+        })
+
+    y1_students = [s for s in students if s["year"] == 1]
+    if y1_students:
+        y1_sp = sum(float(s["total_sp"] or 0) for s in y1_students)
+        y1_avg = round(y1_sp / len(y1_students), 1)
+        opportunities.append({
+            "title": "First-Year Cohort Acceleration",
+            "description": f"Year 1 has {len(y1_students)} students averaging {y1_avg} SP. Early faculty mentorship can boost overall benchmark.",
+            "metric": f"{len(y1_students)} Y1 Students",
+            "type": "cohort"
+        })
+
+    # 4. Threats (T)
+    threats = []
+    pending_res = Database.query_one("""
+        SELECT COUNT(a.id) as count, COUNT(DISTINCT a.student_id) as students_waiting
+        FROM achievements a
+        JOIN users u ON a.student_id = u.id
+        WHERE a.status = 'pending' AND u.department_id = %s AND a.is_deleted = 0
+    """, (dept_id,))
+    pending_count = pending_res["count"] if pending_res else 0
+    if pending_count > 0:
+        threats.append({
+            "title": "Advisor Verification Backlog",
+            "description": f"{pending_count} submitted certificates are currently pending review across department class advisors.",
+            "metric": f"{pending_count} Pending",
+            "type": "process"
+        })
+
+    needs_sp = [s for s in students if not s.get("mandatory_satisfied")]
+    if needs_sp:
+        needs_pct = round((len(needs_sp) / total_students) * 100, 1)
+        threats.append({
+            "title": "Mandatory Vertical Compliance Deficit",
+            "description": f"{len(needs_sp)} students ({needs_pct}%) have not yet satisfied minimum mandatory curriculum vertical guidelines.",
+            "metric": f"{len(needs_sp)} Students",
+            "type": "compliance"
+        })
+
+    return {
+        "department": department,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "opportunities": opportunities,
+        "threats": threats,
+        "stats": {
+            "total_students": total_students,
+            "total_sp": int(tot_dept_sp),
+            "avg_sp": avg_dept_sp,
+            "total_classes": len(classes)
+        },
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+# -------------------------------------------------------------
+# DEAN EXECUTIVE ENDPOINTS (School-Level Oversight)
+# -------------------------------------------------------------
+@app.get("/api/dean/dashboard")
+def dean_dashboard(user: Dict[str, Any] = Depends(require_role(["dean", "principal", "admin"]))):
+    dean_school_id = user.get("school_id") or 5
+    school = Database.query_one("SELECT id, name, code FROM schools WHERE id = %s", (dean_school_id,))
+    if not school:
+        school = Database.query_one("SELECT id, name, code FROM schools ORDER BY id ASC LIMIT 1")
+        dean_school_id = school["id"] if school else 5
+
+    # Departments strictly under this Dean's school
+    departments = Database.query("""
+        SELECT id, name, code FROM departments WHERE school_id = %s ORDER BY name ASC
+    """, (dean_school_id,))
+    total_departments = len(departments)
+    dept_ids = [d["id"] for d in departments]
+    if not dept_ids:
+        dept_ids = [-1]
+    
+    fmt_depts = ','.join(['%s'] * len(dept_ids))
+
+    # Total students in this Dean's school
+    total_students_res = Database.query_one(f"""
+        SELECT COUNT(*) as count 
+        FROM users 
+        WHERE role = 'student' AND (school_id = %s OR department_id IN ({fmt_depts})) AND is_deleted = 0
+    """, (dean_school_id, *dept_ids))
+    total_students = total_students_res["count"] if total_students_res else 0
+
+    # Total SP & Bonus for students of this School
+    sp_res = Database.query_one(f"""
+        SELECT COALESCE(SUM(s.total_sp), 0) as total_sp,
+               COALESCE(SUM(s.bonus_sp), 0) as total_bonus
+        FROM student_summaries s
+        JOIN users u ON s.student_id = u.id
+        WHERE (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND u.is_deleted = 0
+    """, (dean_school_id, *dept_ids))
+    total_sp = sp_res["total_sp"] if sp_res else 0
+    total_bonus = sp_res["total_bonus"] if sp_res else 0
+
+    # Achievement counts for this School
+    ach_stats = Database.query(f"""
+        SELECT a.status, COUNT(*) as count, COALESCE(SUM(a.claimed_sp), 0) as sp_sum
+        FROM achievements a
+        JOIN users u ON a.student_id = u.id
+        WHERE (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND a.is_deleted = 0
+        GROUP BY a.status
+    """, (dean_school_id, *dept_ids))
+    approved_count = 0
+    pending_count = 0
+    rejected_count = 0
+    for a in ach_stats:
+        if a["status"] == "approved":
+            approved_count = a["count"]
+        elif a["status"] == "pending":
+            pending_count = a["count"]
+        elif a["status"] == "rejected":
+            rejected_count = a["count"]
+
+    # Active students (with at least 1 SP) in this School
+    active_res = Database.query_one(f"""
+        SELECT COUNT(DISTINCT s.student_id) as active_count
+        FROM student_summaries s
+        JOIN users u ON s.student_id = u.id
+        WHERE (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND s.total_sp > 0 AND u.is_deleted = 0
+    """, (dean_school_id, *dept_ids))
+    active_students = active_res["active_count"] if active_res else 0
+    participation_rate = round((active_students / total_students * 100), 1) if total_students > 0 else 0
+    avg_sp_per_student = round(total_sp / total_students, 1) if total_students > 0 else 0
+
+    # Department Performance Comparison ONLY for departments under this School
+    dept_performance = []
+    for dept in departments:
+        d_id = dept["id"]
+        d_students_res = Database.query_one("SELECT COUNT(*) as count FROM users WHERE department_id = %s AND role = 'student' AND is_deleted = 0", (d_id,))
+        d_students = d_students_res["count"] if d_students_res else 0
+        
+        d_sp_res = Database.query_one("""
+            SELECT COALESCE(SUM(s.total_sp), 0) as total_sp
+            FROM student_summaries s
+            JOIN users u ON s.student_id = u.id
+            WHERE u.department_id = %s AND u.is_deleted = 0
+        """, (d_id,))
+        d_sp = d_sp_res["total_sp"] if d_sp_res else 0
+        
+        d_active_res = Database.query_one("""
+            SELECT COUNT(DISTINCT s.student_id) as active_count
+            FROM student_summaries s
+            JOIN users u ON s.student_id = u.id
+            WHERE u.department_id = %s AND s.total_sp > 0 AND u.is_deleted = 0
+        """, (d_id,))
+        d_active = d_active_res["active_count"] if d_active_res else 0
+        d_part_rate = round((d_active / d_students * 100), 1) if d_students > 0 else 0
+        d_avg_sp = round(d_sp / d_students, 1) if d_students > 0 else 0
+
+        # Achievements breakdown for this department
+        d_ach = Database.query("""
+            SELECT a.status, COUNT(*) as count
+            FROM achievements a
+            JOIN users u ON a.student_id = u.id
+            WHERE u.department_id = %s AND a.is_deleted = 0
+            GROUP BY a.status
+        """, (d_id,))
+        d_app = sum(x["count"] for x in d_ach if x["status"] == "approved")
+        d_pen = sum(x["count"] for x in d_ach if x["status"] == "pending")
+        d_rej = sum(x["count"] for x in d_ach if x["status"] == "rejected")
+
+        dept_performance.append({
+            "id": d_id,
+            "name": dept["name"],
+            "code": dept["code"],
+            "total_students": d_students,
+            "total_sp": d_sp,
+            "avg_sp": d_avg_sp,
+            "approved_count": d_app,
+            "pending_count": d_pen,
+            "rejected_count": d_rej,
+            "participation_rate": d_part_rate
+        })
+
+    # Vertical Performance across all 10 Verticals for students in this School
+    verticals = Database.query("SELECT id, code, name FROM verticals WHERE is_active = 1 ORDER BY display_order ASC")
+    vertical_performance = []
+    for v in verticals:
+        v_id = v["id"]
+        v_stats = Database.query_one(f"""
+            SELECT COUNT(*) as total_subs,
+                   COALESCE(SUM(CASE WHEN a.status = 'approved' THEN 1 ELSE 0 END), 0) as approved_subs,
+                   COALESCE(SUM(CASE WHEN a.status = 'approved' THEN a.claimed_sp ELSE 0 END), 0) as total_sp,
+                   COUNT(DISTINCT a.student_id) as participants
+            FROM achievements a
+            JOIN activities act ON a.activity_id = act.id
+            JOIN users u ON a.student_id = u.id
+            WHERE act.vertical_id = %s AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND a.is_deleted = 0
+        """, (v_id, dean_school_id, *dept_ids))
+        v_total_subs = v_stats["total_subs"] if v_stats else 0
+        v_approved = v_stats["approved_subs"] if v_stats else 0
+        v_sp = v_stats["total_sp"] if v_stats else 0
+        v_parts = v_stats["participants"] if v_stats else 0
+        v_avg_pts = round(v_sp / v_parts, 1) if v_parts > 0 else 0
+
+        vertical_performance.append({
+            "id": v_id,
+            "code": v["code"],
+            "name": v["name"],
+            "total_submissions": v_total_subs,
+            "approved_submissions": v_approved,
+            "total_sp": v_sp,
+            "student_participants": v_parts,
+            "avg_points_per_student": v_avg_pts
+        })
+
+    # Top 10 High Performers in this Dean's School
+    top_students = Database.query(f"""
+        SELECT s.student_id AS id, s.total_sp, s.bonus_sp, s.internal_marks_100, s.mandatory_satisfied,
+               u.reg_no_emp_id, u.name, u.year, u.semester,
+               d.name AS department_name, c.name AS class_name, c.section AS class_section
+        FROM student_summaries s
+        JOIN users u ON s.student_id = u.id
+        LEFT JOIN departments d ON u.department_id = d.id
+        LEFT JOIN classes c ON u.class_id = c.id
+        WHERE u.role = 'student' AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND u.is_deleted = 0
+        ORDER BY s.total_sp DESC
+        LIMIT 10
+    """, (dean_school_id, *dept_ids))
+    for idx, s in enumerate(top_students):
+        s["rank"] = idx + 1
+
+    return {
+        "school": school,
+        "kpis": {
+            "total_students": total_students,
+            "total_departments": total_departments,
+            "total_star_points": total_sp,
+            "total_bonus_points": total_bonus,
+            "total_approved": approved_count,
+            "total_pending": pending_count,
+            "total_rejected": rejected_count,
+            "active_students": active_students,
+            "participation_rate": participation_rate,
+            "avg_sp_per_student": avg_sp_per_student
+        },
+        "department_performance": dept_performance,
+        "vertical_performance": vertical_performance,
+        "top_students": top_students
+    }
+
+@app.get("/api/dean/departments")
+def dean_departments(
+    department_id: Optional[int] = None,
+    user: Dict[str, Any] = Depends(require_role(["dean", "principal", "admin"]))
+):
+    dean_school_id = user.get("school_id") or 5
+    school = Database.query_one("SELECT id, name, code FROM schools WHERE id = %s", (dean_school_id,))
+    if not school:
+        school = Database.query_one("SELECT id, name, code FROM schools ORDER BY id ASC LIMIT 1")
+        dean_school_id = school["id"] if school else 5
+
+    # Departments strictly under this Dean's school
+    departments = Database.query("""
+        SELECT d.id, d.name, d.code, d.school_id, d.hod_id,
+               hod.name AS hod_name, hod.email AS hod_email, hod.phone AS hod_phone
+        FROM departments d
+        LEFT JOIN users hod ON d.hod_id = hod.id
+        WHERE d.school_id = %s
+        ORDER BY d.name ASC
+    """, (dean_school_id,))
+    
+    verticals = Database.query("SELECT id, code, name FROM verticals WHERE is_active = 1 ORDER BY display_order ASC")
+
+    detailed_depts = []
+    for dept in departments:
+        d_id = dept["id"]
+        
+        # Classes in this department
+        classes = Database.query("""
+            SELECT c.id, c.name, c.section, c.batch_year,
+                   u.name AS advisor_name, u.email AS advisor_email
+            FROM classes c
+            LEFT JOIN users u ON c.advisor_id = u.id
+            WHERE c.department_id = %s
+            ORDER BY c.name ASC
+        """, (d_id,))
+        
+        # Students in each class
+        for cls in classes:
+            c_res = Database.query_one("""
+                SELECT COUNT(*) as student_count,
+                       COALESCE(SUM(s.total_sp), 0) as total_sp
+                FROM users u
+                LEFT JOIN student_summaries s ON u.id = s.student_id
+                WHERE u.class_id = %s AND u.role = 'student' AND u.is_deleted = 0
+            """, (cls["id"],))
+            cls["student_count"] = c_res["student_count"] if c_res else 0
+            cls["total_sp"] = c_res["total_sp"] if c_res else 0
+            cls["avg_sp"] = round(cls["total_sp"] / cls["student_count"], 1) if cls["student_count"] > 0 else 0
+
+        # Department overall summary
+        d_summary = Database.query_one("""
+            SELECT COUNT(*) as student_count,
+                   COALESCE(SUM(s.total_sp), 0) as total_sp,
+                   COALESCE(SUM(s.bonus_sp), 0) as total_bonus,
+                   SUM(CASE WHEN s.total_sp > 0 THEN 1 ELSE 0 END) as active_students
+            FROM users u
+            LEFT JOIN student_summaries s ON u.id = s.student_id
+            WHERE u.department_id = %s AND u.role = 'student' AND u.is_deleted = 0
+        """, (d_id,))
+        
+        st_count = d_summary["student_count"] if d_summary else 0
+        tot_sp = d_summary["total_sp"] if d_summary else 0
+        act_st = d_summary["active_students"] if d_summary else 0
+        avg_sp = round(tot_sp / st_count, 1) if st_count > 0 else 0
+        part_rate = round((act_st / st_count * 100), 1) if st_count > 0 else 0
+
+        # Department achievements
+        ach_res = Database.query("""
+            SELECT a.status, COUNT(*) as count
+            FROM achievements a
+            JOIN users u ON a.student_id = u.id
+            WHERE u.department_id = %s AND a.is_deleted = 0
+            GROUP BY a.status
+        """, (d_id,))
+        app_c = sum(x["count"] for x in ach_res if x["status"] == "approved")
+        pen_c = sum(x["count"] for x in ach_res if x["status"] == "pending")
+        rej_c = sum(x["count"] for x in ach_res if x["status"] == "rejected")
+
+        # Top 5 students in this department
+        top_dept_students = Database.query("""
+            SELECT s.student_id AS id, s.total_sp, s.internal_marks_100, s.mandatory_satisfied,
+                   u.reg_no_emp_id, u.name, u.year,
+                   c.name AS class_name, c.section
+            FROM student_summaries s
+            JOIN users u ON s.student_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE u.department_id = %s AND u.role = 'student' AND u.is_deleted = 0
+            ORDER BY s.total_sp DESC
+            LIMIT 5
+        """, (d_id,))
+
+        # Vertical point breakdown for this department
+        v_breakdown = []
+        d_st_ids = Database.query("SELECT id FROM users WHERE department_id = %s AND role = 'student' AND is_deleted = 0", (d_id,))
+        if d_st_ids:
+            st_id_list = [x["id"] for x in d_st_ids]
+            fmt_str = ','.join(['%s'] * len(st_id_list))
+            txns = Database.query(f"""
+                SELECT vertical_id, COALESCE(SUM(sp_awarded), 0) as sp_sum, COUNT(*) as cert_count
+                FROM star_transactions
+                WHERE student_id IN ({fmt_str})
+                GROUP BY vertical_id
+            """, tuple(st_id_list))
+            txn_map = {t["vertical_id"]: t for t in txns}
+            for v in verticals:
+                item = txn_map.get(v["id"], {"sp_sum": 0, "cert_count": 0})
+                v_breakdown.append({
+                    "id": v["id"],
+                    "code": v["code"],
+                    "name": v["name"],
+                    "total_sp": item["sp_sum"],
+                    "cert_count": item["cert_count"]
+                })
+
+        detailed_depts.append({
+            "id": d_id,
+            "name": dept["name"],
+            "code": dept["code"],
+            "school_id": dept["school_id"],
+            "hod_name": dept.get("hod_name"),
+            "hod_email": dept.get("hod_email"),
+            "hod_phone": dept.get("hod_phone"),
+            "student_count": st_count,
+            "total_sp": tot_sp,
+            "avg_sp": avg_sp,
+            "active_students": act_st,
+            "participation_rate": part_rate,
+            "approved_count": app_c,
+            "pending_count": pen_c,
+            "rejected_count": rej_c,
+            "classes": classes,
+            "top_students": top_dept_students,
+            "vertical_breakdown": v_breakdown
+        })
+
+    target = next((d for d in detailed_depts if d["id"] == department_id), None) if department_id else (detailed_depts[0] if detailed_depts else None)
+
+    return {
+        "school": school,
+        "department": target,
+        "departments": detailed_depts
+    }
+
+@app.get("/api/dean/verticals")
+def dean_verticals(
+    vertical_id: Optional[int] = None,
+    user: Dict[str, Any] = Depends(require_role(["dean", "principal", "admin"]))
+):
+    dean_school_id = user.get("school_id") or 5
+    school = Database.query_one("SELECT id, name, code FROM schools WHERE id = %s", (dean_school_id,))
+    
+    verticals = Database.query("SELECT * FROM verticals WHERE is_active = 1 ORDER BY display_order ASC")
+    departments = Database.query("SELECT id, name, code FROM departments WHERE school_id = %s ORDER BY name ASC", (dean_school_id,))
+    dept_ids = [d["id"] for d in departments]
+    if not dept_ids:
+        dept_ids = [-1]
+    fmt_depts = ','.join(['%s'] * len(dept_ids))
+
+    detailed_verticals = []
+    for v in verticals:
+        v_id = v["id"]
+        
+        # Sub-verticals / Activities under this vertical for this School
+        activities = Database.query(f"""
+            SELECT act.id, act.name, act.activity_no, act.description, act.is_bonus_eligible, act.max_sp,
+                   COUNT(a.id) as total_submissions,
+                   COALESCE(SUM(CASE WHEN a.status = 'approved' THEN 1 ELSE 0 END), 0) as approved_count,
+                   COALESCE(SUM(CASE WHEN a.status = 'pending' THEN 1 ELSE 0 END), 0) as pending_count,
+                   COALESCE(SUM(CASE WHEN a.status = 'rejected' THEN 1 ELSE 0 END), 0) as rejected_count,
+                   COALESCE(SUM(CASE WHEN a.status = 'approved' THEN a.claimed_sp ELSE 0 END), 0) as total_sp
+            FROM activities act
+            LEFT JOIN achievements a ON act.id = a.activity_id AND a.is_deleted = 0
+            LEFT JOIN users u ON a.student_id = u.id AND (u.school_id = %s OR u.department_id IN ({fmt_depts}))
+            WHERE act.vertical_id = %s AND act.is_active = 1 AND act.is_deleted = 0
+            GROUP BY act.id, act.name, act.activity_no, act.description, act.is_bonus_eligible, act.max_sp
+            ORDER BY act.activity_no ASC, act.name ASC
+        """, (dean_school_id, *dept_ids, v_id))
+
+        for act in activities:
+            act["total_sp"] = int(float(act["total_sp"])) if act.get("total_sp") is not None else 0
+            act["approved_count"] = int(act["approved_count"]) if act.get("approved_count") is not None else 0
+            act["pending_count"] = int(act["pending_count"]) if act.get("pending_count") is not None else 0
+            act["rejected_count"] = int(act["rejected_count"]) if act.get("rejected_count") is not None else 0
+            act["total_submissions"] = int(act["total_submissions"]) if act.get("total_submissions") is not None else 0
+
+        # Department distribution strictly for departments in this School
+        dept_dist = []
+        for d in departments:
+            d_res = Database.query_one("""
+                SELECT COUNT(a.id) as submissions,
+                       COALESCE(SUM(CASE WHEN a.status = 'approved' THEN a.claimed_sp ELSE 0 END), 0) as sp_awarded,
+                       COUNT(DISTINCT a.student_id) as participants
+                FROM achievements a
+                JOIN activities act ON a.activity_id = act.id
+                JOIN users u ON a.student_id = u.id
+                WHERE act.vertical_id = %s AND u.department_id = %s AND a.is_deleted = 0
+            """, (v_id, d["id"]))
+            sp_awd = float(d_res["sp_awarded"]) if d_res and d_res.get("sp_awarded") is not None else 0.0
+            dept_dist.append({
+                "department_id": d["id"],
+                "department_name": d["name"],
+                "department_code": d["code"],
+                "submissions": d_res["submissions"] if d_res else 0,
+                "sp_awarded": int(sp_awd) if sp_awd.is_integer() else sp_awd,
+                "participants": d_res["participants"] if d_res else 0
+            })
+
+        # Summary of this vertical for this School
+        tot_subs = sum(a["total_submissions"] for a in activities)
+        app_subs = sum(a["approved_count"] for a in activities)
+        pen_subs = sum(a["pending_count"] for a in activities)
+        rej_subs = sum(a["rejected_count"] for a in activities)
+        tot_sp = sum(a["total_sp"] for a in activities)
+        
+        part_res = Database.query_one(f"""
+            SELECT COUNT(DISTINCT a.student_id) as participants
+            FROM achievements a
+            JOIN activities act ON a.activity_id = act.id
+            JOIN users u ON a.student_id = u.id
+            WHERE act.vertical_id = %s AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND a.is_deleted = 0
+        """, (v_id, dean_school_id, *dept_ids))
+        participants = part_res["participants"] if part_res else 0
+
+        detailed_verticals.append({
+            "id": v_id,
+            "code": v["code"],
+            "name": v["name"],
+            "description": v.get("description") or "",
+            "min_required_sp": v.get("min_required_sp") or 0,
+            "total_submissions": tot_subs,
+            "approved_submissions": app_subs,
+            "pending_submissions": pen_subs,
+            "rejected_submissions": rej_subs,
+            "total_sp": tot_sp,
+            "student_participants": participants,
+            "activities": activities,
+            "department_distribution": dept_dist
+        })
+
+    target = next((v for v in detailed_verticals if v["id"] == vertical_id), None) if vertical_id else (detailed_verticals[0] if detailed_verticals else None)
+
+    return {
+        "school": school,
+        "vertical": target,
+        "verticals": detailed_verticals
+    }
+
+@app.get("/api/dean/students")
+def dean_students(
+    search: Optional[str] = None,
+    department_id: Optional[int] = None,
+    class_id: Optional[int] = None,
+    vertical_id: Optional[int] = None,
+    status: Optional[str] = None,
+    year: Optional[int] = None,
+    page: int = 1,
+    limit: int = 10,
+    user: Dict[str, Any] = Depends(require_role(["dean", "principal", "admin"]))
+):
+    dean_school_id = user.get("school_id") or 5
+    school = Database.query_one("SELECT id, name, code FROM schools WHERE id = %s", (dean_school_id,))
+    
+    # Restrict to this Dean's school
+    sql = """
+        SELECT u.id, u.reg_no_emp_id, u.name, u.email, u.phone, u.year, u.semester,
+               u.department_id, u.class_id,
+               d.name AS department_name, d.code AS department_code,
+               c.name AS class_name, c.section AS class_section,
+               s.total_sp, s.bonus_sp, s.internal_marks_100, s.mandatory_satisfied,
+               (SELECT COUNT(*) FROM achievements a WHERE a.student_id = u.id AND a.status = 'approved' AND a.is_deleted = 0) as approved_count,
+               (SELECT COUNT(*) FROM achievements a WHERE a.student_id = u.id AND a.status = 'pending' AND a.is_deleted = 0) as pending_count,
+               (SELECT COUNT(*) FROM achievements a WHERE a.student_id = u.id AND a.status = 'rejected' AND a.is_deleted = 0) as rejected_count
+        FROM users u
+        LEFT JOIN departments d ON u.department_id = d.id
+        LEFT JOIN classes c ON u.class_id = c.id
+        LEFT JOIN student_summaries s ON u.id = s.student_id
+        WHERE u.role = 'student' AND (u.school_id = %s OR d.school_id = %s) AND u.is_deleted = 0
+    """
+    params = [dean_school_id, dean_school_id]
+
+    if search:
+        s_term = f"%{search.strip()}%"
+        sql += " AND (u.name LIKE %s OR u.reg_no_emp_id LIKE %s OR u.email LIKE %s)"
+        params.extend([s_term, s_term, s_term])
+
+    if department_id:
+        sql += " AND u.department_id = %s"
+        params.append(department_id)
+
+    if class_id:
+        sql += " AND u.class_id = %s"
+        params.append(class_id)
+
+    if year:
+        sql += " AND u.year = %s"
+        params.append(year)
+
+    if status == "satisfied":
+        sql += " AND s.mandatory_satisfied = 1"
+    elif status == "needs_sp":
+        sql += " AND (s.mandatory_satisfied = 0 OR s.mandatory_satisfied IS NULL)"
+    elif status == "active":
+        sql += " AND s.total_sp > 0"
+    elif status == "zero":
+        sql += " AND (s.total_sp = 0 OR s.total_sp IS NULL)"
+
+    if vertical_id:
+        sql += """ AND u.id IN (
+            SELECT DISTINCT a.student_id FROM achievements a 
+            JOIN activities act ON a.activity_id = act.id 
+            WHERE act.vertical_id = %s AND a.is_deleted = 0
+        )"""
+        params.append(vertical_id)
+
+    # Count total
+    count_sql = f"SELECT COUNT(*) as total FROM ({sql}) as subquery"
+    total_res = Database.query_one(count_sql, tuple(params))
+    total_count = total_res["total"] if total_res else 0
+
+    # Pagination
+    offset = (page - 1) * limit
+    sql += " ORDER BY s.total_sp DESC, u.name ASC LIMIT %s OFFSET %s"
+    params.extend([limit, offset])
+
+    students = Database.query(sql, tuple(params))
+    for idx, s in enumerate(students):
+        s["rank"] = offset + idx + 1
+
+    departments = Database.query("SELECT id, name, code FROM departments WHERE school_id = %s ORDER BY name ASC", (dean_school_id,))
+    classes = Database.query("""
+        SELECT c.id, c.name, c.section, c.department_id 
+        FROM classes c 
+        JOIN departments d ON c.department_id = d.id 
+        WHERE d.school_id = %s 
+        ORDER BY c.name ASC
+    """, (dean_school_id,))
+    verticals = Database.query("SELECT id, code, name FROM verticals WHERE is_active = 1 ORDER BY display_order ASC")
+
+    return {
+        "school": school,
+        "students": students,
+        "total": total_count,
+        "page": page,
+        "limit": limit,
+        "total_pages": math.ceil(total_count / limit) if limit > 0 else 1,
+        "departments": departments,
+        "classes": classes,
+        "verticals": verticals
+    }
+
+@app.get("/api/dean/students/{student_id}")
+def dean_student_detail(
+    student_id: str,
+    user: Dict[str, Any] = Depends(require_role(["dean", "principal", "admin"]))
+):
+    student = Database.query_one("""
+        SELECT u.id, u.reg_no_emp_id, u.name, u.email, u.phone, u.year, u.semester, u.status, u.created_at,
+               d.name AS department_name, d.code AS department_code,
+               c.name AS class_name, c.section AS class_section, c.batch_year,
+               adv.name AS advisor_name, adv.email AS advisor_email
+        FROM users u
+        LEFT JOIN departments d ON u.department_id = d.id
+        LEFT JOIN classes c ON u.class_id = c.id
+        LEFT JOIN users adv ON c.advisor_id = adv.id
+        WHERE u.id = %s AND u.is_deleted = 0
+    """, (student_id,))
+
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    scores = recalculate_student_scores(student_id)
+
+    # All achievements
+    achievements = Database.query("""
+        SELECT a.id, a.claimed_sp, a.file_path, a.proof_file_name, a.proof_file_type,
+               a.student_remarks, a.status, a.advisor_remarks, a.submitted_at, a.reviewed_at,
+               act.name AS activity_name, act.is_bonus_eligible,
+               v.code AS vertical_code, v.name AS vertical_name,
+               lvl.level_name, lvl.description AS level_desc,
+               rev.name AS reviewer_name
+        FROM achievements a
+        JOIN activities act ON a.activity_id = act.id
+        JOIN verticals v ON act.vertical_id = v.id
+        JOIN activity_levels lvl ON a.level_id = lvl.id
+        LEFT JOIN users rev ON a.reviewer_id = rev.id
+        WHERE a.student_id = %s AND a.is_deleted = 0
+        ORDER BY a.submitted_at DESC
+    """, (student_id,))
+
+    return {
+        "student": student,
+        "scores": scores,
+        "achievements": achievements
+    }
+
+@app.get("/api/dean/swot")
+def dean_swot(user: Dict[str, Any] = Depends(require_role(["dean", "principal", "admin"]))):
+    dean_school_id = user.get("school_id") or 5
+    school = Database.query_one("SELECT id, name, code FROM schools WHERE id = %s", (dean_school_id,))
+
+    departments = Database.query("SELECT id, name, code FROM departments WHERE school_id = %s ORDER BY name ASC", (dean_school_id,))
+    dept_ids = [d["id"] for d in departments]
+    if not dept_ids:
+        dept_ids = [-1]
+    fmt_depts = ','.join(['%s'] * len(dept_ids))
+
+    # Total students in School
+    total_students_res = Database.query_one(f"""
+        SELECT COUNT(*) as count FROM users 
+        WHERE role = 'student' AND (school_id = %s OR department_id IN ({fmt_depts})) AND is_deleted = 0
+    """, (dean_school_id, *dept_ids))
+    total_students = total_students_res["count"] if total_students_res and total_students_res["count"] > 0 else 1
+
+    # 1. Strengths (S)
+    strengths = []
+    top_verticals = Database.query(f"""
+        SELECT v.code, v.name, COUNT(DISTINCT a.student_id) as participants,
+               COALESCE(SUM(CASE WHEN a.status = 'approved' THEN a.claimed_sp ELSE 0 END), 0) as total_sp
+        FROM verticals v
+        JOIN activities act ON v.id = act.vertical_id
+        JOIN achievements a ON act.id = a.activity_id AND a.is_deleted = 0
+        JOIN users u ON a.student_id = u.id
+        WHERE v.is_active = 1 AND (u.school_id = %s OR u.department_id IN ({fmt_depts}))
+        GROUP BY v.id, v.code, v.name
+        ORDER BY participants DESC, total_sp DESC
+        LIMIT 3
+    """, (dean_school_id, *dept_ids))
+    for v in top_verticals:
+        p_pct = round((v["participants"] / total_students) * 100, 1)
+        strengths.append({
+            "title": f"High Engagement in {v['name']}",
+            "description": f"{v['participants']} students participated ({p_pct}% school reach) generating {v['total_sp']} approved Star Points.",
+            "metric": f"{v['total_sp']} SP",
+            "type": "vertical"
+        })
+
+    # Top performing department in School
+    top_dept = Database.query(f"""
+        SELECT d.name, COUNT(u.id) as students, COALESCE(SUM(s.total_sp), 0) as total_sp
+        FROM departments d
+        JOIN users u ON d.id = u.department_id AND u.role = 'student' AND u.is_deleted = 0
+        JOIN student_summaries s ON u.id = s.student_id
+        WHERE d.school_id = %s
+        GROUP BY d.id, d.name
+        ORDER BY total_sp DESC
+        LIMIT 2
+    """, (dean_school_id,))
+    for d in top_dept:
+        avg = round(d["total_sp"] / d["students"], 1) if d["students"] > 0 else 0
+        strengths.append({
+            "title": f"Leading Programme: {d['name']}",
+            "description": f"Dominates school performance with {d['total_sp']} total SP across {d['students']} students (Avg {avg} SP/student).",
+            "metric": f"Avg {avg} SP",
+            "type": "department"
+        })
+
+    # 2. Weaknesses (W)
+    weaknesses = []
+    low_verticals = Database.query(f"""
+        SELECT v.code, v.name, COUNT(DISTINCT a.student_id) as participants
+        FROM verticals v
+        LEFT JOIN activities act ON v.id = act.vertical_id
+        LEFT JOIN achievements a ON act.id = a.activity_id AND a.is_deleted = 0
+        LEFT JOIN users u ON a.student_id = u.id AND (u.school_id = %s OR u.department_id IN ({fmt_depts}))
+        WHERE v.is_active = 1
+        GROUP BY v.id, v.code, v.name
+        ORDER BY participants ASC
+        LIMIT 3
+    """, (dean_school_id, *dept_ids))
+    for v in low_verticals:
+        p_pct = round((v["participants"] / total_students) * 100, 1)
+        weaknesses.append({
+            "title": f"Subdued Participation in {v['name']}",
+            "description": f"Only {v['participants']} students ({p_pct}% reach) have submitted achievements in this vertical.",
+            "metric": f"{p_pct}% Reach",
+            "type": "vertical"
+        })
+
+    # Inactive students count in School
+    inactive_res = Database.query_one(f"""
+        SELECT COUNT(*) as count FROM users u
+        LEFT JOIN student_summaries s ON u.id = s.student_id
+        WHERE u.role = 'student' AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND (s.total_sp = 0 OR s.total_sp IS NULL) AND u.is_deleted = 0
+    """, (dean_school_id, *dept_ids))
+    inactive_count = inactive_res["count"] if inactive_res else 0
+    if inactive_count > 0:
+        inact_pct = round((inactive_count / total_students) * 100, 1)
+        weaknesses.append({
+            "title": f"Zero-Point Inactive Student Cohort",
+            "description": f"{inactive_count} students ({inact_pct}% of school enrollment) currently have 0 earned Star Points.",
+            "metric": f"{inactive_count} Students",
+            "type": "cohort"
+        })
+
+    # 3. Opportunities (O)
+    opportunities = []
+    opp_acts = Database.query(f"""
+        SELECT act.name, v.name as vertical_name, act.is_bonus_eligible,
+               COUNT(a.id) as subs
+        FROM activities act
+        JOIN verticals v ON act.vertical_id = v.id
+        LEFT JOIN achievements a ON act.id = a.activity_id AND a.is_deleted = 0
+        LEFT JOIN users u ON a.student_id = u.id AND (u.school_id = %s OR u.department_id IN ({fmt_depts}))
+        WHERE act.is_bonus_eligible = 1
+        GROUP BY act.id, act.name, v.name, act.is_bonus_eligible
+        ORDER BY subs ASC
+        LIMIT 3
+    """, (dean_school_id, *dept_ids))
+    for o in opp_acts:
+        opportunities.append({
+            "title": f"Promote Bonus-Eligible {o['name']}",
+            "description": f"Carries accelerated bonus star points under {o['vertical_name']} with significant upside for students.",
+            "metric": "Bonus Points",
+            "type": "activity"
+        })
+
+    # First year growth potential in School
+    y1_res = Database.query_one(f"""
+        SELECT COUNT(*) as count, COALESCE(SUM(s.total_sp), 0) as total_sp
+        FROM users u
+        LEFT JOIN student_summaries s ON u.id = s.student_id
+        WHERE u.year = 1 AND u.role = 'student' AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND u.is_deleted = 0
+    """, (dean_school_id, *dept_ids))
+    if y1_res and y1_res["count"] > 0:
+        y1_avg = round(y1_res["total_sp"] / y1_res["count"], 1)
+        opportunities.append({
+            "title": "First-Year Cohort Acceleration",
+            "description": f"Year 1 has {y1_res['count']} students averaging {y1_avg} SP. Early semester orientation can drive higher participation.",
+            "metric": f"{y1_res['count']} Y1 Students",
+            "type": "cohort"
+        })
+
+    # 4. Threats / Attention Areas (T)
+    threats = []
+    pending_res = Database.query_one(f"""
+        SELECT COUNT(*) as count, COUNT(DISTINCT a.student_id) as students_waiting
+        FROM achievements a
+        JOIN users u ON a.student_id = u.id
+        WHERE a.status = 'pending' AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND a.is_deleted = 0
+    """, (dean_school_id, *dept_ids))
+    pending_backlog = pending_res["count"] if pending_res else 0
+    if pending_backlog > 0:
+        threats.append({
+            "title": "Verification Queue Backlog",
+            "description": f"{pending_backlog} student certificate submissions are currently awaiting advisor verification across school departments.",
+            "metric": f"{pending_backlog} Pending",
+            "type": "process"
+        })
+
+    # Mandatory criteria deficit in School
+    needs_sp_res = Database.query_one(f"""
+        SELECT COUNT(*) as count FROM users u
+        LEFT JOIN student_summaries s ON u.id = s.student_id
+        WHERE u.role = 'student' AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND (s.mandatory_satisfied = 0 OR s.mandatory_satisfied IS NULL) AND u.is_deleted = 0
+    """, (dean_school_id, *dept_ids))
+    needs_sp_count = needs_sp_res["count"] if needs_sp_res else 0
+    if needs_sp_count > 0:
+        needs_pct = round((needs_sp_count / total_students) * 100, 1)
+        threats.append({
+            "title": "Mandatory Vertical Compliance Gap",
+            "description": f"{needs_sp_count} students ({needs_pct}%) have not yet satisfied minimum mandatory vertical guidelines for this academic term.",
+            "metric": f"{needs_sp_count} Students",
+            "type": "compliance"
+        })
+
+    return {
+        "school": school,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "opportunities": opportunities,
+        "threats": threats,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+@app.get("/api/dean/reports")
+def dean_reports(
+    type: str = "institution_summary",
+    department_id: Optional[int] = None,
+    vertical_id: Optional[int] = None,
+    user: Dict[str, Any] = Depends(require_role(["dean", "principal", "admin"]))
+):
+    dean_school_id = user.get("school_id") or 5
+    school = Database.query_one("SELECT id, name, code FROM schools WHERE id = %s", (dean_school_id,))
+
+    departments = Database.query("SELECT id, name, code FROM departments WHERE school_id = %s ORDER BY name ASC", (dean_school_id,))
+    dept_ids = [d["id"] for d in departments]
+    if not dept_ids:
+        dept_ids = [-1]
+    fmt_depts = ','.join(['%s'] * len(dept_ids))
+
+    verticals = Database.query("SELECT id, code, name FROM verticals WHERE is_active = 1 ORDER BY display_order ASC")
+
+    if type == "department_comparison":
+        rows = []
+        for d in departments:
+            d_id = d["id"]
+            d_st_res = Database.query_one("SELECT COUNT(*) as count FROM users WHERE department_id = %s AND role = 'student' AND is_deleted = 0", (d_id,))
+            st_count = d_st_res["count"] if d_st_res else 0
+            
+            d_sp_res = Database.query_one("""
+                SELECT COALESCE(SUM(s.total_sp), 0) as total_sp,
+                       COALESCE(SUM(s.bonus_sp), 0) as total_bonus
+                FROM student_summaries s
+                JOIN users u ON s.student_id = u.id
+                WHERE u.department_id = %s AND u.is_deleted = 0
+            """, (d_id,))
+            tot_sp = float(d_sp_res["total_sp"]) if d_sp_res and d_sp_res.get("total_sp") is not None else 0.0
+            tot_bonus = float(d_sp_res["total_bonus"]) if d_sp_res and d_sp_res.get("total_bonus") is not None else 0.0
+            avg_sp = round(tot_sp / st_count, 1) if st_count > 0 else 0.0
+
+            d_ach = Database.query("""
+                SELECT a.status, COUNT(*) as count
+                FROM achievements a
+                JOIN users u ON a.student_id = u.id
+                WHERE u.department_id = %s AND a.is_deleted = 0
+                GROUP BY a.status
+            """, (d_id,))
+            app_c = sum(x["count"] for x in d_ach if x["status"] == "approved")
+            pen_c = sum(x["count"] for x in d_ach if x["status"] == "pending")
+            rej_c = sum(x["count"] for x in d_ach if x["status"] == "rejected")
+
+            rows.append({
+                "Department Name": d["name"],
+                "Department Code": d["code"],
+                "Total Students": st_count,
+                "Total Star Points": int(tot_sp) if tot_sp.is_integer() else tot_sp,
+                "Average SP / Student": avg_sp,
+                "Converted Internal Marks (Total)": round(tot_sp / 2.0, 1),
+                "Bonus SP Awarded": int(tot_bonus) if tot_bonus.is_integer() else tot_bonus,
+                "Approved Achievements": app_c,
+                "Pending Approvals": pen_c,
+                "Rejected Submissions": rej_c
+            })
+
+        # Overall Vertical Distribution for this School (V1 - V10)
+        vertical_dist = []
+        for v in verticals:
+            v_id = v["id"]
+            v_res = Database.query_one(f"""
+                SELECT COALESCE(SUM(CASE WHEN a.status = 'approved' THEN a.claimed_sp ELSE 0 END), 0) as total_sp,
+                       COUNT(DISTINCT a.student_id) as participants,
+                       COUNT(a.id) as submissions
+                FROM achievements a
+                JOIN activities act ON a.activity_id = act.id
+                JOIN users u ON a.student_id = u.id
+                WHERE act.vertical_id = %s AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND a.is_deleted = 0
+            """, (v_id, dean_school_id, *dept_ids))
+            v_sp = float(v_res["total_sp"]) if v_res and v_res.get("total_sp") is not None else 0.0
+            vertical_dist.append({
+                "id": v_id,
+                "code": v["code"],
+                "name": v["name"],
+                "total_sp": int(v_sp) if v_sp.is_integer() else v_sp,
+                "participants": v_res["participants"] if v_res else 0,
+                "submissions": v_res["submissions"] if v_res else 0
+            })
+
+        return {
+            "type": type,
+            "title": f"{school.get('name') if school else 'School'} - Department Performance Report",
+            "data": rows,
+            "vertical_distribution": vertical_dist,
+            "school": school
+        }
+
+    elif type == "vertical_matrix":
+        rows = []
+        for v in verticals:
+            v_id = v["id"]
+            v_stats = Database.query_one(f"""
+                SELECT COUNT(*) as total_subs,
+                       SUM(CASE WHEN a.status = 'approved' THEN 1 ELSE 0 END) as approved_subs,
+                       SUM(CASE WHEN a.status = 'pending' THEN 1 ELSE 0 END) as pending_subs,
+                       SUM(CASE WHEN a.status = 'rejected' THEN 1 ELSE 0 END) as rejected_subs,
+                       COALESCE(SUM(CASE WHEN a.status = 'approved' THEN a.claimed_sp ELSE 0 END), 0) as total_sp,
+                       COUNT(DISTINCT a.student_id) as participants
+                FROM achievements a
+                JOIN activities act ON a.activity_id = act.id
+                JOIN users u ON a.student_id = u.id
+                WHERE act.vertical_id = %s AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND a.is_deleted = 0
+            """, (v_id, dean_school_id, *dept_ids))
+            t_subs = v_stats["total_subs"] if v_stats else 0
+            app_s = v_stats["approved_subs"] if v_stats else 0
+            pen_s = v_stats["pending_subs"] if v_stats else 0
+            rej_s = v_stats["rejected_subs"] if v_stats else 0
+            tot_sp = float(v_stats["total_sp"]) if v_stats and v_stats.get("total_sp") is not None else 0.0
+            parts = v_stats["participants"] if v_stats else 0
+            avg_pts = round(tot_sp / parts, 1) if parts > 0 else 0.0
+
+            rows.append({
+                "Vertical Code": v["code"],
+                "Vertical Name": v["name"],
+                "Student Participants": parts,
+                "Total Submissions": t_subs,
+                "Approved Submissions": app_s,
+                "Pending Submissions": pen_s,
+                "Rejected Submissions": rej_s,
+                "Total Star Points Awarded": int(tot_sp) if tot_sp.is_integer() else tot_sp,
+                "Converted Internal Marks": round(tot_sp / 2.0, 1),
+                "Avg Points per Participant": avg_pts
+            })
+        return {"type": type, "title": f"{school.get('name') if school else 'School'} - Vertical Performance Matrix", "data": rows}
+
+    elif type == "student_roster":
+        sql = f"""
+            SELECT u.reg_no_emp_id AS "Roll Number",
+                   u.name AS "Student Name",
+                   d.name AS "Department",
+                   c.name AS "Class",
+                   c.section AS "Section",
+                   u.year AS "Year",
+                   s.total_sp AS "Total Star Points",
+                   s.bonus_sp AS "Bonus SP",
+                   s.internal_marks_100 AS "Internal Marks (100 Scale)",
+                   CASE WHEN s.mandatory_satisfied = 1 THEN 'YES' ELSE 'NO' END AS "Mandatory Satisfied"
+            FROM users u
+            LEFT JOIN departments d ON u.department_id = d.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN student_summaries s ON u.id = s.student_id
+            WHERE u.role = 'student' AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND u.is_deleted = 0
+        """
+        params = [dean_school_id, *dept_ids]
+        if department_id:
+            sql += " AND u.department_id = %s"
+            params.append(department_id)
+        sql += " ORDER BY s.total_sp DESC"
+        rows = Database.query(sql, tuple(params))
+        return {"type": type, "title": f"{school.get('name') if school else 'School'} - Student Performance Roster", "data": rows}
+
+    # Default: institution_summary (School Summary for Dean)
+    total_st_res = Database.query_one(f"SELECT COUNT(*) as count FROM users WHERE role = 'student' AND (school_id = %s OR department_id IN ({fmt_depts})) AND is_deleted = 0", (dean_school_id, *dept_ids))
+    total_st = total_st_res["count"] if total_st_res else 0
+    tot_sp_res = Database.query_one(f"SELECT COALESCE(SUM(total_sp), 0) as sum FROM student_summaries s JOIN users u ON s.student_id = u.id WHERE (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND u.is_deleted = 0", (dean_school_id, *dept_ids))
+    tot_sp = float(tot_sp_res["sum"]) if tot_sp_res and tot_sp_res.get("sum") is not None else 0.0
+    app_c_res = Database.query_one(f"SELECT COUNT(*) as count FROM achievements a JOIN users u ON a.student_id = u.id WHERE a.status = 'approved' AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND a.is_deleted = 0", (dean_school_id, *dept_ids))
+    app_c = app_c_res["count"] if app_c_res else 0
+    pen_c_res = Database.query_one(f"SELECT COUNT(*) as count FROM achievements a JOIN users u ON a.student_id = u.id WHERE a.status = 'pending' AND (u.school_id = %s OR u.department_id IN ({fmt_depts})) AND a.is_deleted = 0", (dean_school_id, *dept_ids))
+    pen_c = pen_c_res["count"] if pen_c_res else 0
+
+    tot_sp_display = int(tot_sp) if tot_sp.is_integer() else tot_sp
+    summary_data = [
+        {"Metric": "Assigned School", "Value": school.get("name") if school else "School of Computing Science", "Remarks": f"Code: {school.get('code') if school else 'SOCS'}"},
+        {"Metric": "Total Programmes / Departments", "Value": str(len(departments)), "Remarks": "Active programmes in School"},
+        {"Metric": "Total Enrolled Students", "Value": str(total_st), "Remarks": "School student count"},
+        {"Metric": "Total Star Points Awarded", "Value": f"{tot_sp_display} SP", "Remarks": "Accumulated school points"},
+        {"Metric": "Converted Internal Marks", "Value": f"{round(tot_sp / 2.0, 1)} Marks", "Remarks": "2 SP = 1 Mark rule"},
+        {"Metric": "Approved Achievements", "Value": str(app_c), "Remarks": "Verified proofs"},
+        {"Metric": "Pending Review Queue", "Value": str(pen_c), "Remarks": "Awaiting advisor action"},
+        {"Metric": "School Average SP", "Value": f"{round(tot_sp / total_st, 1)} SP" if total_st > 0 else "0 SP", "Remarks": "Per student average"}
+    ]
+    return {"type": type, "title": f"{school.get('name') if school else 'School'} - Executive Performance Summary", "data": summary_data}
+
 
 # -------------------------------------------------------------
 # NOTIFICATIONS ENDPOINTS
@@ -1570,6 +2732,506 @@ async def import_students_excel(
             imported_count += 1
 
     return {"success": True, "message": f"Successfully imported {imported_count} students from Excel"}
+
+# -------------------------------------------------------------
+# PRINCIPAL COLLEGE-WIDE EXECUTIVE ENDPOINTS
+# Scope: Entire College -> All 6 Schools -> All 22 Programmes -> Students
+# -------------------------------------------------------------
+
+@app.get("/api/principal/dashboard")
+def principal_dashboard(user: Dict[str, Any] = Depends(require_role(["principal", "admin"]))):
+    schools = Database.query("""
+        SELECT s.id, s.code, s.name, s.dean_id,
+               u.name AS dean_name, u.email AS dean_email
+        FROM schools s
+        LEFT JOIN users u ON s.dean_id = u.id
+        ORDER BY s.id ASC
+    """)
+    total_schools = len(schools)
+
+    depts = Database.query("SELECT id, code, name, school_id FROM departments")
+    total_programmes = len(depts)
+
+    st_res = Database.query_one("SELECT COUNT(*) as count FROM users WHERE role = 'student' AND is_deleted = 0")
+    total_students = st_res["count"] if st_res else 0
+
+    sp_res = Database.query_one("SELECT COALESCE(SUM(total_sp), 0) as sp, COALESCE(SUM(bonus_sp), 0) as bonus FROM student_summaries s JOIN users u ON s.student_id = u.id WHERE u.is_deleted = 0")
+    total_sp = int(float(sp_res["sp"])) if sp_res else 0
+    total_bonus = int(float(sp_res["bonus"])) if sp_res else 0
+
+    ach_stats = Database.query("""
+        SELECT status, COUNT(*) as count, COALESCE(SUM(claimed_sp), 0) as sp_sum
+        FROM achievements WHERE is_deleted = 0
+        GROUP BY status
+    """)
+    app_count = sum(x["count"] for x in ach_stats if x["status"] == "approved")
+    pen_count = sum(x["count"] for x in ach_stats if x["status"] == "pending")
+    rej_count = sum(x["count"] for x in ach_stats if x["status"] == "rejected")
+
+    # School Overview Table
+    school_overview = []
+    for s in schools:
+        s_id = s["id"]
+        s_depts = [d for d in depts if d["school_id"] == s_id]
+        s_dept_ids = [d["id"] for d in s_depts] or [-1]
+        fmt = ','.join(['%s'] * len(s_dept_ids))
+
+        s_st_res = Database.query_one(f"""
+            SELECT COUNT(*) as count FROM users 
+            WHERE role = 'student' AND (school_id = %s OR department_id IN ({fmt})) AND is_deleted = 0
+        """, (s_id, *s_dept_ids))
+        s_students = s_st_res["count"] if s_st_res else 0
+
+        s_sp_res = Database.query_one(f"""
+            SELECT COALESCE(SUM(s.total_sp), 0) as total_sp
+            FROM student_summaries s
+            JOIN users u ON s.student_id = u.id
+            WHERE (u.school_id = %s OR u.department_id IN ({fmt})) AND u.is_deleted = 0
+        """, (s_id, *s_dept_ids))
+        s_sp = int(float(s_sp_res["total_sp"])) if s_sp_res else 0
+
+        s_ach_res = Database.query_one(f"""
+            SELECT COUNT(a.id) as total,
+                   COALESCE(SUM(CASE WHEN a.status = 'approved' THEN 1 ELSE 0 END), 0) as approved,
+                   COALESCE(SUM(CASE WHEN a.status = 'pending' THEN 1 ELSE 0 END), 0) as pending
+            FROM achievements a
+            JOIN users u ON a.student_id = u.id
+            WHERE (u.school_id = %s OR u.department_id IN ({fmt})) AND a.is_deleted = 0
+        """, (s_id, *s_dept_ids))
+        s_app_ach = s_ach_res["approved"] if s_ach_res else 0
+        s_pen_ach = s_ach_res["pending"] if s_ach_res else 0
+
+        avg_sp = round(s_sp / s_students, 1) if s_students > 0 else 0.0
+
+        school_overview.append({
+            "id": s_id,
+            "school_id": s_id,
+            "code": s["code"],
+            "school_code": s["code"],
+            "name": s["name"],
+            "school_name": s["name"],
+            "dean_name": s.get("dean_name") or "Dean Assigned",
+            "dean_email": s.get("dean_email") or "",
+            "programmes_count": len(s_depts),
+            "total_programmes": len(s_depts),
+            "students_count": s_students,
+            "total_students": s_students,
+            "total_sp": s_sp,
+            "avg_sp": avg_sp,
+            "approved_achievements": s_app_ach,
+            "pending_achievements": s_pen_ach
+        })
+
+    # College Vertical Performance
+    verticals = Database.query("SELECT id, code, name FROM verticals WHERE is_active = 1 ORDER BY display_order ASC")
+    college_verticals = []
+    for v in verticals:
+        v_res = Database.query_one("""
+            SELECT COALESCE(SUM(CASE WHEN a.status = 'approved' THEN a.claimed_sp ELSE 0 END), 0) as total_sp,
+                   COUNT(DISTINCT a.student_id) as participants,
+                   COUNT(a.id) as submissions
+            FROM achievements a
+            JOIN activities act ON a.activity_id = act.id
+            WHERE act.vertical_id = %s AND a.is_deleted = 0
+        """, (v["id"],))
+        v_sp = int(float(v_res["total_sp"])) if v_res else 0
+        college_verticals.append({
+            "id": v["id"],
+            "code": v["code"],
+            "name": v["name"],
+            "total_sp": v_sp,
+            "participants": v_res["participants"] if v_res else 0,
+            "submissions": v_res["submissions"] if v_res else 0
+        })
+
+    # Recent verified activities across college
+    recent_acts = Database.query("""
+        SELECT a.id, a.claimed_sp as points, a.status, a.submitted_at as created_at,
+               u.name as student_name, u.reg_no_emp_id as register_number,
+               act.name as category_name,
+               d.name as programme, sch.name as school
+        FROM achievements a
+        JOIN users u ON a.student_id = u.id
+        JOIN activities act ON a.activity_id = act.id
+        LEFT JOIN departments d ON u.department_id = d.id
+        LEFT JOIN schools sch ON u.school_id = sch.id
+        WHERE a.is_deleted = 0 AND a.status = 'approved'
+        ORDER BY a.submitted_at DESC
+        LIMIT 6
+    """)
+
+    return {
+        "kpis": {
+            "total_schools": total_schools,
+            "total_programmes": total_programmes,
+            "total_students": total_students,
+            "total_star_points": total_sp,
+            "total_sp": total_sp,
+            "total_bonus_points": total_bonus,
+            "total_achievements": app_count,
+            "total_pending": pen_count,
+            "total_rejected": rej_count,
+            "college_avg_sp": round(total_sp / total_students, 1) if total_students > 0 else 0.0
+        },
+        "schools": school_overview,
+        "schools_overview": school_overview,
+        "vertical_overview": college_verticals,
+        "recent_activities": recent_acts
+    }
+
+@app.get("/api/principal/schools")
+def principal_schools(user: Dict[str, Any] = Depends(require_role(["principal", "admin"]))):
+    schools = Database.query("""
+        SELECT s.id, s.code, s.name, s.dean_id,
+               u.name AS dean_name, u.email AS dean_email, u.phone AS dean_phone
+        FROM schools s
+        LEFT JOIN users u ON s.dean_id = u.id
+        ORDER BY s.id ASC
+    """)
+    result = []
+    for s in schools:
+        s_id = s["id"]
+        programmes = Database.query("""
+            SELECT d.id, d.code, d.name,
+                   hod.name AS hod_name, hod.email AS hod_email,
+                   (SELECT COUNT(*) FROM users u WHERE u.department_id = d.id AND u.role = 'student' AND u.is_deleted = 0) as student_count,
+                   (SELECT COALESCE(SUM(sm.total_sp), 0) FROM student_summaries sm JOIN users u ON sm.student_id = u.id WHERE u.department_id = d.id AND u.is_deleted = 0) as total_sp
+            FROM departments d
+            LEFT JOIN users hod ON hod.department_id = d.id AND hod.role = 'hod' AND hod.is_deleted = 0
+            WHERE d.school_id = %s
+            ORDER BY d.name ASC
+        """, (s_id,))
+        
+        st_count = sum(p["student_count"] for p in programmes)
+        tot_sp = sum(int(float(p["total_sp"])) for p in programmes)
+
+        for p in programmes:
+            p["total_sp"] = int(float(p["total_sp"]))
+            p["avg_sp"] = round(p["total_sp"] / p["student_count"], 1) if p["student_count"] > 0 else 0.0
+
+        result.append({
+            "id": s_id,
+            "code": s["code"],
+            "name": s["name"],
+            "dean_name": s.get("dean_name") or "Dean Assigned",
+            "dean_email": s.get("dean_email") or "",
+            "dean_phone": s.get("dean_phone") or "",
+            "programmes_count": len(programmes),
+            "students_count": st_count,
+            "total_sp": tot_sp,
+            "programmes": programmes
+        })
+    return {"schools": result}
+
+@app.get("/api/principal/programmes")
+def principal_programmes(
+    school_id: Optional[int] = None,
+    user: Dict[str, Any] = Depends(require_role(["principal", "admin"]))
+):
+    sql = """
+        SELECT d.id, d.code, d.name, d.school_id,
+               s.name AS school_name, s.code AS school_code,
+               hod.name AS hod_name, hod.email AS hod_email,
+               (SELECT COUNT(*) FROM users u WHERE u.department_id = d.id AND u.role = 'student' AND u.is_deleted = 0) as student_count,
+               (SELECT COALESCE(SUM(sm.total_sp), 0) FROM student_summaries sm JOIN users u ON sm.student_id = u.id WHERE u.department_id = d.id AND u.is_deleted = 0) as total_sp,
+               (SELECT COUNT(a.id) FROM achievements a JOIN users u ON a.student_id = u.id WHERE u.department_id = d.id AND a.status = 'approved' AND a.is_deleted = 0) as achievements_count
+        FROM departments d
+        LEFT JOIN schools s ON d.school_id = s.id
+        LEFT JOIN users hod ON hod.department_id = d.id AND hod.role = 'hod' AND hod.is_deleted = 0
+    """
+    params = []
+    if school_id:
+        sql += " WHERE d.school_id = %s"
+        params.append(school_id)
+    sql += " ORDER BY s.name ASC, d.name ASC"
+
+    programmes = Database.query(sql, tuple(params))
+    for p in programmes:
+        p["total_sp"] = int(float(p["total_sp"]))
+        p["students_count"] = p["student_count"]
+        p["avg_sp"] = round(p["total_sp"] / p["student_count"], 1) if p["student_count"] > 0 else 0.0
+
+    all_schools = Database.query("SELECT id, name, code FROM schools ORDER BY id ASC")
+    return {"programmes": programmes, "schools": all_schools}
+
+@app.get("/api/principal/students")
+def principal_students(
+    search: Optional[str] = None,
+    school_id: Optional[int] = None,
+    department_id: Optional[int] = None,
+    class_id: Optional[int] = None,
+    page: int = 1,
+    limit: int = 15,
+    user: Dict[str, Any] = Depends(require_role(["principal", "admin"]))
+):
+    sql = """
+        SELECT u.id, u.reg_no_emp_id, u.name, u.email, u.year, u.semester,
+               u.school_id, u.department_id, u.class_id,
+               s.name AS school_name, s.code AS school_code,
+               d.name AS department_name, d.code AS department_code,
+               c.name AS class_name, c.section AS class_section,
+               sm.total_sp, sm.bonus_sp, sm.internal_marks_100, sm.mandatory_satisfied,
+               (SELECT COUNT(*) FROM achievements a WHERE a.student_id = u.id AND a.status = 'approved' AND a.is_deleted = 0) as approved_count,
+               (SELECT COUNT(*) FROM achievements a WHERE a.student_id = u.id AND a.status = 'pending' AND a.is_deleted = 0) as pending_count
+        FROM users u
+        LEFT JOIN schools s ON u.school_id = s.id
+        LEFT JOIN departments d ON u.department_id = d.id
+        LEFT JOIN classes c ON u.class_id = c.id
+        LEFT JOIN student_summaries sm ON u.id = sm.student_id
+        WHERE u.role = 'student' AND u.is_deleted = 0
+    """
+    params = []
+    if search:
+        st = f"%{search.strip()}%"
+        sql += " AND (u.name LIKE %s OR u.reg_no_emp_id LIKE %s OR u.email LIKE %s)"
+        params.extend([st, st, st])
+    if school_id:
+        sql += " AND (u.school_id = %s OR d.school_id = %s)"
+        params.extend([school_id, school_id])
+    if department_id:
+        sql += " AND u.department_id = %s"
+        params.append(department_id)
+    if class_id:
+        sql += " AND u.class_id = %s"
+        params.append(class_id)
+
+    count_sql = f"SELECT COUNT(*) as total FROM ({sql}) as subquery"
+    count_res = Database.query_one(count_sql, tuple(params))
+    total_count = count_res["total"] if count_res else 0
+
+    sql += " ORDER BY sm.total_sp DESC, u.name ASC LIMIT %s OFFSET %s"
+    offset = (page - 1) * limit
+    params.extend([limit, offset])
+
+    students = Database.query(sql, tuple(params))
+    for st in students:
+        st["total_sp"] = int(float(st["total_sp"])) if st.get("total_sp") else 0
+        st["bonus_sp"] = int(float(st["bonus_sp"])) if st.get("bonus_sp") else 0
+        st["full_name"] = st.get("name")
+        st["register_number"] = st.get("reg_no_emp_id")
+        st["total_points"] = st["total_sp"]
+        st["achievements_count"] = (st.get("approved_count") or 0) + (st.get("pending_count") or 0)
+
+    all_schools = Database.query("SELECT id, name, code FROM schools ORDER BY id ASC")
+    all_depts = Database.query("SELECT id, name, code, school_id FROM departments ORDER BY name ASC")
+
+    return {
+        "students": students,
+        "total": total_count,
+        "page": page,
+        "limit": limit,
+        "total_pages": math.ceil(total_count / limit) if limit > 0 else 1,
+        "schools": all_schools,
+        "departments": all_depts
+    }
+
+@app.get("/api/principal/achievements")
+def principal_achievements(
+    school_id: Optional[int] = None,
+    department_id: Optional[int] = None,
+    vertical_id: Optional[int] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    limit: int = 15,
+    user: Dict[str, Any] = Depends(require_role(["principal", "admin"]))
+):
+    sql = """
+        SELECT a.id, a.claimed_sp as points, a.status, a.submitted_at, a.reviewed_at, a.proof_file_name,
+               a.student_remarks, a.advisor_remarks, a.file_path,
+               u.id AS student_id, u.name AS student_name, u.reg_no_emp_id as register_number,
+               s.id AS school_id, s.name AS school_name, s.code AS school_code,
+               d.id AS department_id, d.name AS department_name, d.code AS department_code,
+               c.name AS class_name, c.section AS class_section,
+               act.name AS category_name, act.name AS activity_name,
+               v.id AS vertical_id, v.code AS vertical_code, v.name AS vertical_name
+        FROM achievements a
+        JOIN users u ON a.student_id = u.id
+        LEFT JOIN departments d ON u.department_id = d.id
+        LEFT JOIN schools s ON d.school_id = s.id OR u.school_id = s.id
+        LEFT JOIN classes c ON u.class_id = c.id
+        JOIN activities act ON a.activity_id = act.id
+        JOIN verticals v ON act.vertical_id = v.id
+        WHERE a.is_deleted = 0 AND u.is_deleted = 0
+    """
+    params = []
+    if search:
+        st = f"%{search.strip()}%"
+        sql += " AND (u.name LIKE %s OR u.reg_no_emp_id LIKE %s OR act.name LIKE %s)"
+        params.extend([st, st, st])
+    if school_id:
+        sql += " AND (s.id = %s OR u.school_id = %s)"
+        params.extend([school_id, school_id])
+    if department_id:
+        sql += " AND u.department_id = %s"
+        params.append(department_id)
+    if vertical_id:
+        sql += " AND act.vertical_id = %s"
+        params.append(vertical_id)
+    if status and status != "all":
+        sql += " AND a.status = %s"
+        params.append(status)
+
+    count_sql = f"SELECT COUNT(*) as total FROM ({sql}) as subquery"
+    count_res = Database.query_one(count_sql, tuple(params))
+    total_count = count_res["total"] if count_res else 0
+
+    sql += " ORDER BY a.submitted_at DESC LIMIT %s OFFSET %s"
+    offset = (page - 1) * limit
+    params.extend([limit, offset])
+
+    achievements = Database.query(sql, tuple(params))
+    for ach in achievements:
+        if ach.get("file_path"):
+            ach["certificate_url"] = f"/api/uploads/achievements/{ach['file_path']}"
+        ach["created_at"] = ach.get("submitted_at")
+
+    all_schools = Database.query("SELECT id, name, code FROM schools ORDER BY id ASC")
+    all_depts = Database.query("SELECT id, name, code, school_id FROM departments ORDER BY name ASC")
+    all_verts = Database.query("SELECT id, name, code FROM verticals WHERE is_active = 1 ORDER BY display_order ASC")
+
+    return {
+        "achievements": achievements,
+        "total": total_count,
+        "page": page,
+        "limit": limit,
+        "total_pages": math.ceil(total_count / limit) if limit > 0 else 1,
+        "schools": all_schools,
+        "departments": all_depts,
+        "verticals": all_verts
+    }
+
+@app.get("/api/principal/reports")
+def principal_reports(
+    type: str = "college_summary",
+    school_id: Optional[int] = None,
+    department_id: Optional[int] = None,
+    user: Dict[str, Any] = Depends(require_role(["principal", "admin"]))
+):
+    all_schools = Database.query("SELECT id, name, code FROM schools ORDER BY id ASC")
+    all_depts = Database.query("SELECT id, name, code, school_id FROM departments ORDER BY name ASC")
+
+    if type == "school_report":
+        schools = Database.query("SELECT id, code, name FROM schools ORDER BY id ASC")
+        rows = []
+        for s in schools:
+            s_id = s["id"]
+            depts = Database.query("SELECT id, code, name FROM departments WHERE school_id = %s", (s_id,))
+            d_ids = [d["id"] for d in depts] or [-1]
+            fmt = ','.join(['%s'] * len(d_ids))
+
+            st_res = Database.query_one(f"SELECT COUNT(*) as c FROM users WHERE role = 'student' AND (school_id = %s OR department_id IN ({fmt})) AND is_deleted = 0", (s_id, *d_ids))
+            st_count = st_res["c"] if st_res else 0
+
+            sp_res = Database.query_one(f"SELECT COALESCE(SUM(s.total_sp), 0) as sp FROM student_summaries s JOIN users u ON s.student_id = u.id WHERE (u.school_id = %s OR u.department_id IN ({fmt})) AND u.is_deleted = 0", (s_id, *d_ids))
+            tot_sp = int(float(sp_res["sp"])) if sp_res else 0
+
+            ach_res = Database.query_one(f"SELECT COUNT(*) as c FROM achievements a JOIN users u ON a.student_id = u.id WHERE a.status = 'approved' AND (u.school_id = %s OR u.department_id IN ({fmt})) AND a.is_deleted = 0", (s_id, *d_ids))
+            ach_count = ach_res["c"] if ach_res else 0
+
+            rows.append({
+                "School Name": s["name"],
+                "School Code": s["code"],
+                "Programmes": len(depts),
+                "Total Students": st_count,
+                "Total Star Points": tot_sp,
+                "Converted Internal Marks": round(tot_sp / 2.0, 1),
+                "Average SP / Student": round(tot_sp / st_count, 1) if st_count > 0 else 0.0,
+                "Approved Achievements": ach_count
+            })
+        return {"type": type, "title": "KPRCAS — School-Wise Performance Report", "data": rows, "schools": all_schools, "departments": all_depts}
+
+    elif type == "programme_report":
+        sql = """
+            SELECT d.id, d.code, d.name, s.name as school_name, s.code as school_code
+            FROM departments d
+            LEFT JOIN schools s ON d.school_id = s.id
+        """
+        params = []
+        if school_id:
+            sql += " WHERE d.school_id = %s"
+            params.append(school_id)
+        if department_id:
+            sql += (" AND" if school_id else " WHERE") + " d.id = %s"
+            params.append(department_id)
+        sql += " ORDER BY s.name ASC, d.name ASC"
+
+        depts = Database.query(sql, tuple(params))
+        rows = []
+        for d in depts:
+            d_id = d["id"]
+            st_res = Database.query_one("SELECT COUNT(*) as c FROM users WHERE department_id = %s AND role = 'student' AND is_deleted = 0", (d_id,))
+            st_count = st_res["c"] if st_res else 0
+
+            sp_res = Database.query_one("SELECT COALESCE(SUM(s.total_sp), 0) as sp FROM student_summaries s JOIN users u ON s.student_id = u.id WHERE u.department_id = %s AND u.is_deleted = 0", (d_id,))
+            tot_sp = int(float(sp_res["sp"])) if sp_res else 0
+
+            ach_res = Database.query_one("SELECT COUNT(*) as c FROM achievements a JOIN users u ON a.student_id = u.id WHERE u.department_id = %s AND a.status = 'approved' AND a.is_deleted = 0", (d_id,))
+            ach_count = ach_res["c"] if ach_res else 0
+
+            rows.append({
+                "Programme / Department": d["name"],
+                "Department Code": d["code"],
+                "School": d["school_name"] or "—",
+                "Total Students": st_count,
+                "Total Star Points": tot_sp,
+                "Converted Internal Marks": round(tot_sp / 2.0, 1),
+                "Average SP / Student": round(tot_sp / st_count, 1) if st_count > 0 else 0.0,
+                "Approved Achievements": ach_count
+            })
+        return {"type": type, "title": "KPRCAS — Programme & Department Performance Report", "data": rows, "schools": all_schools, "departments": all_depts}
+
+    elif type in ("student_achievement", "student_achievement_report"):
+        sql = """
+            SELECT u.reg_no_emp_id AS "Roll Number",
+                   u.name AS "Student Name",
+                   s.name AS "School",
+                   d.name AS "Programme",
+                   c.name AS "Class",
+                   sm.total_sp AS "Total Star Points",
+                   ROUND(sm.total_sp / 2.0, 1) AS "Converted Internal Marks",
+                   (SELECT COUNT(*) FROM achievements a WHERE a.student_id = u.id AND a.status = 'approved' AND a.is_deleted = 0) AS "Approved Achievements"
+            FROM users u
+            LEFT JOIN schools s ON u.school_id = s.id
+            LEFT JOIN departments d ON u.department_id = d.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN student_summaries sm ON u.id = sm.student_id
+            WHERE u.role = 'student' AND u.is_deleted = 0
+        """
+        params = []
+        if school_id:
+            sql += " AND (u.school_id = %s OR d.school_id = %s)"
+            params.extend([school_id, school_id])
+        if department_id:
+            sql += " AND u.department_id = %s"
+            params.append(department_id)
+        sql += " ORDER BY sm.total_sp DESC LIMIT 100"
+
+        rows = Database.query(sql, tuple(params))
+        return {"type": type, "title": "KPRCAS — Student Achievement Standing Report", "data": rows, "schools": all_schools, "departments": all_depts}
+
+    # Default: college_summary
+    st_res = Database.query_one("SELECT COUNT(*) as count FROM users WHERE role = 'student' AND is_deleted = 0")
+    total_st = st_res["count"] if st_res else 0
+    sp_res = Database.query_one("SELECT COALESCE(SUM(total_sp), 0) as sp FROM student_summaries s JOIN users u ON s.student_id = u.id WHERE u.is_deleted = 0")
+    tot_sp = int(float(sp_res["sp"])) if sp_res else 0
+    ach_res = Database.query_one("SELECT COUNT(*) as count FROM achievements WHERE status = 'approved' AND is_deleted = 0")
+    app_c = ach_res["count"] if ach_res else 0
+    pen_res = Database.query_one("SELECT COUNT(*) as count FROM achievements WHERE status = 'pending' AND is_deleted = 0")
+    pen_c = pen_res["count"] if pen_res else 0
+
+    summary_data = [
+        {"Metric": "Institution", "Value": "KPR College of Arts - Science and Research (KPRCAS)", "Remarks": "Autonomous Institution"},
+        {"Metric": "Total Academic Schools", "Value": "6 Schools", "Remarks": "SOM, SOC, SoITC, SOF, SOCS, SOISDS"},
+        {"Metric": "Total Programmes / Departments", "Value": "22 Programmes", "Remarks": "Undergraduate & Postgraduate"},
+        {"Metric": "Total Enrolled Students", "Value": str(total_st), "Remarks": "College-wide student population"},
+        {"Metric": "Total Star Points Awarded", "Value": f"{tot_sp} SP", "Remarks": "Across all curriculum verticals"},
+        {"Metric": "Converted Internal Marks", "Value": f"{round(tot_sp / 2.0, 1)} Marks", "Remarks": "Official 2 SP = 1 Mark rule"},
+        {"Metric": "Total Approved Achievements", "Value": str(app_c), "Remarks": "Verified certificates"},
+        {"Metric": "Pending Review Submissions", "Value": str(pen_c), "Remarks": "Across class advisors"},
+        {"Metric": "College Average SP", "Value": f"{round(tot_sp / total_st, 1)} SP" if total_st > 0 else "0 SP", "Remarks": "Per student average"}
+    ]
+    return {"type": type, "title": "KPRCAS — College Executive Performance Summary", "data": summary_data, "schools": all_schools, "departments": all_depts}
 
 # -------------------------------------------------------------
 # STATIC FILE SERVING FOR PROOF DOCUMENTS

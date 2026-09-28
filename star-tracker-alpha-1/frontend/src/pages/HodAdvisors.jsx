@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
-import ExportButton from '../components/ExportButton';
 import StudentGalleryModal from '../components/StudentGalleryModal';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -37,7 +36,9 @@ export default function HodAdvisors() {
   const [advisorLoading, setAdvisorLoading] = useState(false);
   const [inspectorTab, setInspectorTab] = useState('students'); // 'students' | 'pending'
   const [studentSearch, setStudentSearch] = useState('');
+  const [studentPage, setStudentPage] = useState(1);
   const [selectedGalleryStudentId, setSelectedGalleryStudentId] = useState(null);
+  const STUDENTS_PER_PAGE = 5;
 
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
@@ -65,6 +66,7 @@ export default function HodAdvisors() {
     setInspectingAdvisor(adv);
     setInspectorTab('students');
     setStudentSearch('');
+    setStudentPage(1);
     if (adv.class_id) {
       try {
         setAdvisorLoading(true);
@@ -89,21 +91,18 @@ export default function HodAdvisors() {
     return !q || name.includes(q) || email.includes(q) || className.includes(q) || section.includes(q);
   });
 
-  const exportData = advisors.map(a => ({
-    'Advisor Name': a.name,
-    'Email': a.email,
-    'Assigned Class': a.class_name ? `${a.class_name} - ${a.class_section || ''}` : 'Unassigned',
-    'Total Students': a.total_students || 0,
-    'Pending Approvals': a.pending_reviews || 0,
-    'Total Approved': a.approved_count || 0
-  }));
-
   const inspectedStudents = (advisorDetails?.students || []).filter(s => {
     const q = studentSearch.toLowerCase();
     const name = (s.name || '').toLowerCase();
     const reg = (s.reg_no_emp_id || '').toLowerCase();
     return !q || name.includes(q) || reg.includes(q);
   });
+
+  const totalStudentPages = Math.ceil(inspectedStudents.length / STUDENTS_PER_PAGE) || 1;
+  const paginatedStudents = inspectedStudents.slice(
+    (studentPage - 1) * STUDENTS_PER_PAGE,
+    studentPage * STUDENTS_PER_PAGE
+  );
 
   const inspectedPending = advisorDetails?.pendingCertificates || [];
 
@@ -178,21 +177,6 @@ export default function HodAdvisors() {
                   <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                   <span>Refresh</span>
                 </button>
-
-                <ExportButton 
-                  buttonText="Export Roster"
-                  data={exportData} 
-                  filename="Department_Class_Advisors_Roster" 
-                  title="KPRCAS Star Tracker — Department Faculty Advisors Roster"
-                  columns={[
-                    { header: 'Advisor Name', dataKey: 'Advisor Name' },
-                    { header: 'Email', dataKey: 'Email' },
-                    { header: 'Assigned Class', dataKey: 'Assigned Class' },
-                    { header: 'Total Students', dataKey: 'Total Students' },
-                    { header: 'Pending Reviews', dataKey: 'Pending Approvals' },
-                    { header: 'Total Approved', dataKey: 'Total Approved' }
-                  ]}
-                />
               </div>
             </div>
           </div>
@@ -506,13 +490,16 @@ export default function HodAdvisors() {
                         placeholder="Search student by name or reg no..."
                         className="form-input"
                         value={studentSearch}
-                        onChange={e => setStudentSearch(e.target.value)}
+                        onChange={e => {
+                          setStudentSearch(e.target.value);
+                          setStudentPage(1);
+                        }}
                         style={{ height: 34, paddingLeft: '2.2rem', fontSize: '0.8rem', width: '100%' }}
                       />
                     </div>
 
                     <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                      Showing <strong>{inspectedStudents.length}</strong> students in section
+                      Showing <strong>{inspectedStudents.length > 0 ? (studentPage - 1) * STUDENTS_PER_PAGE + 1 : 0}–{Math.min(studentPage * STUDENTS_PER_PAGE, inspectedStudents.length)}</strong> of <strong>{inspectedStudents.length}</strong> students in section
                     </span>
                   </div>
 
@@ -540,45 +527,116 @@ export default function HodAdvisors() {
                           </tr>
                         </thead>
                         <tbody>
-                          {inspectedStudents.map((s, sIdx) => (
-                            <tr key={s.id || sIdx} style={{ borderBottom: '1px solid var(--border-color)', background: sIdx % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-secondary)' }}>
-                              <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center', fontWeight: 700, color: 'var(--text-muted)' }}>
-                                #{sIdx + 1}
-                              </td>
-                              <td style={{ padding: '0.55rem 0.75rem', fontWeight: 700, color: 'var(--brand-blue)' }}>
-                                {s.reg_no_emp_id}
-                              </td>
-                              <td style={{ padding: '0.55rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                {s.name}
-                              </td>
-                              <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center', fontWeight: 800, color: 'var(--brand-green)' }}>
-                                {s.total_sp} SP
-                              </td>
-                              <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center', fontWeight: 700 }}>
-                                {s.internal_marks_100} / 100
-                              </td>
-                              <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center' }}>
-                                {s.mandatory_satisfied ? (
-                                  <span className="badge badge-approved" style={{ fontSize: '0.65rem' }}>Satisfied</span>
-                                ) : (
-                                  <span className="badge badge-pending" style={{ fontSize: '0.65rem' }}>Needs SP</span>
-                                )}
-                              </td>
-                              <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
-                                <button
-                                  onClick={() => setSelectedGalleryStudentId(s.id)}
-                                  className="btn btn-secondary"
-                                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                                  title="Inspect Student Achievements"
-                                >
-                                  <Folder size={12} />
-                                  <span>Gallery</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {paginatedStudents.map((s, sIdx) => {
+                            const globalRank = (studentPage - 1) * STUDENTS_PER_PAGE + sIdx + 1;
+                            return (
+                              <tr key={s.id || sIdx} style={{ borderBottom: '1px solid var(--border-color)', background: sIdx % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-secondary)' }}>
+                                <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center', fontWeight: 700, color: 'var(--text-muted)' }}>
+                                  #{globalRank}
+                                </td>
+                                <td style={{ padding: '0.55rem 0.75rem', fontWeight: 700, color: 'var(--brand-blue)' }}>
+                                  {s.reg_no_emp_id}
+                                </td>
+                                <td style={{ padding: '0.55rem 0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  {s.name}
+                                </td>
+                                <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center', fontWeight: 800, color: 'var(--brand-green)' }}>
+                                  {s.total_sp} SP
+                                </td>
+                                <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center', fontWeight: 700 }}>
+                                  {s.internal_marks_100} / 100
+                                </td>
+                                <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center' }}>
+                                  {s.mandatory_satisfied ? (
+                                    <span className="badge badge-approved" style={{ fontSize: '0.65rem' }}>Satisfied</span>
+                                  ) : (
+                                    <span className="badge badge-pending" style={{ fontSize: '0.65rem' }}>Needs SP</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center' }}>
+                                  <button
+                                    onClick={() => setSelectedGalleryStudentId(s.id)}
+                                    className="btn btn-secondary"
+                                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                                    title="Inspect Student Achievements"
+                                  >
+                                    <Folder size={12} />
+                                    <span>Gallery</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
+
+                      {/* Pagination Controls Bar */}
+                      {totalStudentPages > 1 && (
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '0.6rem 0.85rem',
+                          borderTop: '1px solid var(--border-color)',
+                          background: 'var(--bg-secondary)',
+                          flexWrap: 'wrap',
+                          gap: '0.5rem'
+                        }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            Page <strong>{studentPage}</strong> of <strong>{totalStudentPages}</strong>
+                          </span>
+                          <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                            <button
+                              onClick={() => setStudentPage(p => Math.max(1, p - 1))}
+                              disabled={studentPage === 1}
+                              className="btn btn-secondary"
+                              style={{
+                                padding: '0.2rem 0.6rem',
+                                fontSize: '0.75rem',
+                                opacity: studentPage === 1 ? 0.4 : 1,
+                                cursor: studentPage === 1 ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              Prev
+                            </button>
+
+                            {Array.from({ length: totalStudentPages }, (_, i) => i + 1).map(pageNum => (
+                              <button
+                                key={pageNum}
+                                onClick={() => setStudentPage(pageNum)}
+                                style={{
+                                  minWidth: 26,
+                                  height: 26,
+                                  padding: '0 0.35rem',
+                                  borderRadius: 5,
+                                  fontSize: '0.75rem',
+                                  fontWeight: studentPage === pageNum ? 700 : 500,
+                                  border: studentPage === pageNum ? '1px solid var(--brand-green)' : '1px solid var(--border-color)',
+                                  background: studentPage === pageNum ? 'var(--brand-green)' : 'var(--bg-card)',
+                                  color: studentPage === pageNum ? '#fff' : 'var(--text-primary)',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {pageNum}
+                              </button>
+                            ))}
+
+                            <button
+                              onClick={() => setStudentPage(p => Math.min(totalStudentPages, p + 1))}
+                              disabled={studentPage === totalStudentPages}
+                              className="btn btn-secondary"
+                              style={{
+                                padding: '0.2rem 0.6rem',
+                                fontSize: '0.75rem',
+                                opacity: studentPage === totalStudentPages ? 0.4 : 1,
+                                cursor: studentPage === totalStudentPages ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
